@@ -1,6 +1,7 @@
 # search-engine-tool
 
 [![CI](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/scAB1001/search-engine-tool/graph/badge.svg?token=919TUQ3FW1)](https://codecov.io/gh/scAB1001/search-engine-tool)
 
 ## Project overview and purpose
 
@@ -43,7 +44,5 @@ Features include: creating an inverted index of all word occurrences, allow the 
 ### 📊 Testing & Coverage Analytics
 
 This project enforces a strict **80% test coverage** requirement. The CI/CD pipeline actively monitors branch health, and test analytics are visualised below via Codecov.
-
-[![codecov](https://codecov.io/gh/scAB1001/search-engine-tool/graph/badge.svg?token=919TUQ3FW1)](https://codecov.io/gh/scAB1001/search-engine-tool)
 
 ## Any dependencies and how to install them
