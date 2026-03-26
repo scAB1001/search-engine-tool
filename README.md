@@ -1,5 +1,7 @@
 # search-engine-tool
 
+[![CI](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml)
+
 ## Project overview and purpose
 
 ### Structure and Purpose
