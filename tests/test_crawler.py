@@ -47,6 +47,35 @@ def test_crawler_enforces_6_second_politeness(
     mock_sleep.assert_called_once_with(4.0)
 
 
+@patch("src.crawler.time.sleep")
+@patch("src.crawler.time.time")
+def test_crawler_skips_sleep_if_time_elapsed(
+    mock_time: MagicMock,
+    mock_sleep: MagicMock,
+    mock_requests_get: MagicMock
+) -> None:
+    """Test that the crawler skips sleep if the 6-second window has naturally passed."""
+
+    # Simulate time passing:
+    # t=100.0 (End of Request 1)
+    # t=110.0 (Start of Request 2. 10 seconds have passed!)
+    # t=112.0 (End of Request 2)
+    mock_time.side_effect = [100.0, 110.0, 112.0]
+
+    crawler = PoliteCrawler()
+
+    # First request finishes at t=100.0
+    crawler.fetch_quotes("http://fake-url.com/page/1")
+
+    # Second request starts at t=110.0.
+    # elapsed_time = 10.0s. time_to_wait = -4.0s.
+    # The `if time_to_wait > 0:` block evaluates to False!
+    crawler.fetch_quotes("http://fake-url.com/page/2")
+
+    # Sleep should NEVER be called because time_to_wait was negative
+    assert mock_sleep.call_count == 0
+
+
 def test_crawler_handles_http_errors(mocker: MagicMock) -> None:
     """Test that the crawler returns an empty list gracefully on HTTP failures."""
     # Create a mock that raises a RequestException
