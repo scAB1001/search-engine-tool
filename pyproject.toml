@@ -19,6 +19,7 @@ keywords = ["web-crawler", "web-scraper", "indexing", "", "banking"]
 
 dependencies = [
     "beautifulsoup4>=4.14.3",
+    "bs4>=0.0.2",
     "requests>=2.33.0",
     "typer>=0.24.1",
 ]
