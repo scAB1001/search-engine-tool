@@ -18,6 +18,40 @@ def test_crawler_extracts_quotes_successfully(mock_requests_get: MagicMock) -> N
         "http://fake-url.com", timeout=10)
 
 
+def test_crawler_ignores_malformed_quotes() -> None:
+    """
+    Test that the crawler safely ignores quote blocks that are missing
+    either the text span or the author tag, triggering the False branch.
+    """
+    malformed_html = """
+    <html>
+        <body>
+            <div class="quote">
+                <span class="text">"I have no author."</span>
+            </div>
+            <div class="quote">
+                <small class="author">Ghost Writer</small>
+            </div>
+            <div class="quote">
+            </div>
+            <div class="quote">
+                <span class="text">"I am a valid quote."</span>
+                <small class="author">Valid Author</small>
+            </div>
+        </body>
+    </html>
+    """
+    crawler = PoliteCrawler()
+
+    # Bypass the network layer and test the parsing engine directly
+    extracted_data = crawler._parse_html(malformed_html)
+
+    # It should ignore the 3 malformed blocks and only extract the 1 valid block
+    assert len(extracted_data) == 1
+    assert extracted_data[0]["author"] == "Valid Author"
+    assert extracted_data[0]["text"] == '"I am a valid quote."'
+
+
 @patch("src.crawler.time.sleep")
 @patch("src.crawler.time.time")
 def test_crawler_enforces_6_second_politeness(
