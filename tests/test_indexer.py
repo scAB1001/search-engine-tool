@@ -54,3 +54,14 @@ def test_save_and_load_index(tmp_path: pytest.TempPathFactory) -> None:
     assert loaded_index.total_documents == 1
     assert "disk" in loaded_index.index
     assert loaded_index.index["disk"]["postings"]["doc_1"]["positions"] == [3]
+
+
+def test_load_missing_index_file() -> None:
+    """
+    Test that loading a non-existent index file triggers the exception handler.
+    """
+    index = InvertedIndex()
+
+    # We assert that executing the code inside this block WILL raise this specific error
+    with pytest.raises(FileNotFoundError):
+        index.load("path/to/absolute/nowhere.json")
