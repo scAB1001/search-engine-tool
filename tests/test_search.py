@@ -56,3 +56,17 @@ def test_search_empty_query(populated_index: InvertedIndex) -> None:
     engine = SearchEngine(populated_index)
     assert engine.search("") == []
     assert engine.search("?!,") == []
+
+
+def test_search_mutually_exclusive_words(populated_index: InvertedIndex) -> None:
+    """
+    Test that a multi-word query returns empty if the words exist in the index
+    individually, but never appear together in the same document.
+    """
+    engine = SearchEngine(populated_index)
+
+    # 'good' is in page_1 and page_2. 'games' is in page_3.
+    # The Boolean AND intersection will be mathematically empty.
+    results = engine.search("good games")
+
+    assert results == []
