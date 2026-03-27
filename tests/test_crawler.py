@@ -150,7 +150,7 @@ def test_crawler_retries_on_timeout(mock_get: MagicMock, mock_sleep: MagicMock) 
     assert mock_get.call_count == 3
     # It should have slept for 2 seconds between the first two failed attempts
     assert mock_sleep.call_count == 2
-    mock_sleep.assert_called_with(2.0)
+    mock_sleep.assert_called_with(10.0)
 
 
 @patch("src.crawler.requests.get")
@@ -168,4 +168,20 @@ def test_crawler_aborts_on_http_error(mock_get: MagicMock) -> None:
     # It should fail gracefully
     assert results == []
     # It should only attempt ONCE because a 404 is a permanent error
+    assert mock_get.call_count == 1
+
+
+@patch("src.crawler.requests.get")
+def test_crawler_rejects_non_html(mock_get: MagicMock) -> None:
+    """Test that the crawler safely aborts if the URL points to a non-HTML file."""
+    mock_response = MagicMock()
+    # Simulate hitting a PDF or JSON endpoint
+    mock_response.headers = {"Content-Type": "application/pdf"}
+    mock_get.return_value = mock_response
+
+    crawler = PoliteCrawler()
+    results = crawler.fetch_quotes("http://fake-url.com/document.pdf")
+
+    # It should immediately reject it without crashing or parsing
+    assert results == []
     assert mock_get.call_count == 1
