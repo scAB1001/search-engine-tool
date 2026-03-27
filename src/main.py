@@ -27,7 +27,7 @@ def build() -> None:
     console.print(
         "[bold green]Starting politeness-aware crawl...[/bold green]")
 
-    # Ensure the data directory exists [cite: 112-114]
+    # Ensure the data directory exists
     INDEX_FILE.parent.mkdir(exist_ok=True)
 
     # Loop through the pagination until we hit a page with no quotes
