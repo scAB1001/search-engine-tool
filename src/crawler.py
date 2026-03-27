@@ -14,7 +14,10 @@ class PoliteCrawler:
 
     def __init__(self, delay_seconds: float = 6.0) -> None:
         self.delay_seconds = delay_seconds
-        self.last_request_time = 0.0
+        self.last_request_time: float = 0.0
+        # Identify our crawler to the server administrators
+        self.headers = {
+            "User-Agent": "QuotesSearchEngineBot/1.0 (Educational Project)"}
 
     def _enforce_politeness(self) -> None:
         """
@@ -33,24 +36,41 @@ class PoliteCrawler:
 
     def fetch_quotes(self, url: str) -> list[dict[str, str]]:
         """
-        Fetches and parses a single page of quotes.
-        Returns a list of dictionaries containing the text and author.
+        Fetches and parses quotes from a given URL, utilizing a retry mechanism
+        for transient network failures and strict timeout limits.
         """
         self._enforce_politeness()
+        max_retries = 3
 
-        try:
-            # We use a 10-second timeout to prevent hanging on dead network connections
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()  # Raises HTTPError for bad responses (4xx/5xx)
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Use a 10-second timeout to prevent hanging on dead network connections
+                response = requests.get(url, headers=self.headers, timeout=10.0)
+                response.raise_for_status()  # Raises HTTPError for responses 4xx/5xx
 
-            # Record the exact time the request finished
-            self.last_request_time = time.time()
+                # Record the exact time the request finished
+                self.last_request_time = time.time()
 
-            return self._parse_html(response.text)
+                return self._parse_html(response.text)
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch {url}. Error: {e}")
-            return []  # Fail gracefully
+            except (
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectionError
+            ) as e:
+                logger.warning(
+                    f"Network error on attempt {attempt}/{max_retries} for {url}: {e}")
+                if attempt == max_retries:
+                    logger.error(f"Max retries reached for {url}. Abandoning.")
+                    return []
+                # Short backoff before retrying
+                time.sleep(2.0)
+
+            except requests.exceptions.HTTPError as e:
+                # 4xx or 5xx errors. Pointless retrying a 404.
+                logger.error(f"HTTP Error for {url}: {e}")
+                return []
+
+        return []
 
     def _parse_html(self, html_content: str) -> list[dict[str, str]]:
         """Extracts quote text and authors from the raw HTML using BeautifulSoup."""

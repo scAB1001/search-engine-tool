@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from requests.exceptions import RequestException
 
 from src.crawler import PoliteCrawler
@@ -15,7 +16,11 @@ def test_crawler_extracts_quotes_successfully(mock_requests_get: MagicMock) -> N
     assert "Albert Einstein" in quotes[0]["author"]
     assert "Harry" in quotes[1]["text"]
     mock_requests_get.assert_called_once_with(
-        "http://fake-url.com", timeout=10)
+        "http://fake-url.com",
+        headers={
+            "User-Agent": "QuotesSearchEngineBot/1.0 (Educational Project)"},
+        timeout=10.0
+    )
 
 
 def test_crawler_ignores_malformed_quotes() -> None:
@@ -110,15 +115,57 @@ def test_crawler_skips_sleep_if_time_elapsed(
     assert mock_sleep.call_count == 0
 
 
-def test_crawler_handles_http_errors(mocker: MagicMock) -> None:
-    """Test that the crawler returns an empty list gracefully on HTTP failures."""
-    # Create a mock that raises a RequestException
-    mock_failed_get = mocker.patch(
-        "requests.get", side_effect=RequestException("404 Not Found"))
+@patch("src.crawler.time.sleep")
+@patch("src.crawler.requests.get")
+def test_crawler_handles_http_errors(
+    mock_get: MagicMock,
+    mock_sleep: MagicMock
+) -> None:
+    """Test that the crawler gracefully handles 404/500 errors."""
+    mock_response = MagicMock()
+    # Change RequestException to HTTPError
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "404 Not Found")
+    mock_get.return_value = mock_response
 
     crawler = PoliteCrawler()
     quotes = crawler.fetch_quotes("http://fake-url.com/does-not-exist")
 
-    # It should catch the error and return an empty list rather than crashing the app
     assert quotes == []
-    mock_failed_get.assert_called_once()
+
+
+@patch("src.crawler.time.sleep")
+@patch("src.crawler.requests.get")
+def test_crawler_retries_on_timeout(mock_get: MagicMock, mock_sleep: MagicMock) -> None:
+    """Test that the crawler retries up to 3 times on a ConnectionError/Timeout."""
+    # Force the mock to raise a Timeout exception 3 times in a row
+    mock_get.side_effect = requests.exceptions.Timeout("Connection timed out")
+
+    crawler = PoliteCrawler()
+    results = crawler.fetch_quotes("http://fake-url.com")
+
+    # It should fail gracefully, returning an empty list
+    assert results == []
+    # It should have attempted exactly 3 times
+    assert mock_get.call_count == 3
+    # It should have slept for 2 seconds between the first two failed attempts
+    assert mock_sleep.call_count == 2
+    mock_sleep.assert_called_with(2.0)
+
+
+@patch("src.crawler.requests.get")
+def test_crawler_aborts_on_http_error(mock_get: MagicMock) -> None:
+    """Test that the crawler instantly aborts on 404s without retrying."""
+    # Force a 404 Not Found error
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "404 Not Found")
+    mock_get.return_value = mock_response
+
+    crawler = PoliteCrawler()
+    results = crawler.fetch_quotes("http://fake-url.com")
+
+    # It should fail gracefully
+    assert results == []
+    # It should only attempt ONCE because a 404 is a permanent error
+    assert mock_get.call_count == 1
