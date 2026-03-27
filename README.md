@@ -12,20 +12,20 @@ search-engine-tool/
 ├── .github/workflows/       # CI/CD (Ruff, Mypy, Pytest)
 ├── src/
 │   ├── __init__.py
-│   ├── crawler.py           # Handles HTTP requests and the strict 6-second politeness window [cite: 17]
-│   ├── indexer.py           # Processes text and builds the inverted index (we'll implement TF-IDF here) [cite: 18, 168]
-│   ├── search.py            # Executes queries against the index (handling case-insensitivity) [cite: 19]
-│   └── main.py              # The CLI entrypoint (build, load, print, find commands) [cite: 27-36]
+│   ├── crawler.py           # Handles HTTP requests and the strict 6-second politeness window
+│   ├── indexer.py           # Processes text and builds the inverted index (we'll implement TF-IDF here)
+│   ├── search.py            # Executes queries against the index (handling case-insensitivity)
+│   └── main.py              # The CLI entrypoint (build, load, print, find commands)
 ├── tests/
 │   ├── conftest.py          # Fixtures for mocked HTML responses
-│   ├── test_crawler.py      # Validates rate-limiting and error handling [cite: 109, 141]
-│   ├── test_indexer.py      # Validates inverted index structure and word statistics [cite: 110, 163]
-│   └── test_search.py       # Validates multi-word queries and edge cases [cite: 111, 163]
+│   ├── test_crawler.py      # Validates rate-limiting and error handling
+│   ├── test_indexer.py      # Validates inverted index structure and word statistics
+│   └── test_search.py       # Validates multi-word queries and edge cases
 ├── data/
-│   └── index.json           # The compiled index file [cite: 112, 114]
+│   └── index.json           # The compiled index file
 ├── .pre-commit-config.yaml  # Local "Shift-Left" quality gates
 ├── pyproject.toml           # uv project configuration
-└── README.md                # Comprehensive setup, usage, and architecture documentation [cite: 116-121]
+└── README.md                # Comprehensive setup, usage, and architecture documentation
 ```
 
 A tool to crawl https://quotes.toscrape.com/.

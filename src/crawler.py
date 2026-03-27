@@ -57,7 +57,7 @@ class PoliteCrawler:
         soup = BeautifulSoup(html_content, "html.parser")
         extracted_data = []
 
-        # Target the specific CSS classes from https://quotes.toscrape.com/ [cite: 14]
+        # Target the specific CSS classes from https://quotes.toscrape.com/
         quote_blocks = soup.find_all("div", class_="quote")
 
         for block in quote_blocks:
