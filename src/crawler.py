@@ -37,7 +37,7 @@ class PoliteCrawler:
 
     def fetch_quotes(self, url: str) -> list[dict[str, str]]:
         """
-        Fetches and parses quotes from a given URL, utilizing a retry mechanism
+        Fetches and parses quotes from a given URL, utilising a retry mechanism
         for transient network failures and strict timeout limits.
         """
         self._enforce_politeness()
@@ -52,18 +52,34 @@ class PoliteCrawler:
                 # Record the exact time the request finished
                 self.last_request_time = time.time()
 
+                # Response Headers Verification
+                content_type = response.headers.get("Content-Type", "")
+                if "text/html" not in content_type:
+                    logger.warning(
+                        f"Skipping {url}: Expected text/html, got {content_type}")
+                    return []
+
                 return self._parse_html(response.text)
 
-            except (
-                requests.exceptions.Timeout,
-                requests.exceptions.ConnectionError
-            ) as e:
+            except requests.exceptions.Timeout as e:
+                # Granular Exception Handling - 10s wait for Timeouts
                 logger.warning(
-                    f"Network error on attempt {attempt}/{max_retries} for {url}: {e}")
+                    f"Timeout on attempt {attempt}/{max_retries} "
+                    f"for {url}: {e}. Waiting 10s.")
                 if attempt == max_retries:
                     logger.error(f"Max retries reached for {url}. Abandoning.")
                     return []
-                # Short backoff before retrying
+                time.sleep(10.0)
+
+            except requests.exceptions.ConnectionError as e:
+                # Granular Exception Handling - 2s wait for Connection Errors
+                logger.warning(
+                    f"Connection error on attempt {attempt}/{max_retries} "
+                    f"for {url}: {e}"
+                )
+                if attempt == max_retries:
+                    logger.error(f"Max retries reached for {url}. Abandoning.")
+                    return []
                 time.sleep(2.0)
 
             except requests.exceptions.HTTPError as e:
