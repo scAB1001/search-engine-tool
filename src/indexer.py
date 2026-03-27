@@ -29,14 +29,19 @@ class InvertedIndex:
         # Temporary storage during the crawl phase before TF-IDF is finalized
         self._raw_documents: dict[str, list[str]] = {}
 
+        # Pre-compile the regex engine once during initialisation
+        # Remove anything that isn't a letter or number (strips punctuation)
+        self.punctuation_stripper = re.compile(r'[^a-z0-9\s]')
+
     def _tokenize(self, text: str) -> list[str]:
         """
         Cleans text by removing punctuation and converting to lowercase.
         Case sensitivity requirement: 'Good' == 'good'.
         """
         text = text.lower()
-        # Remove anything that isn't a letter or number (strips punctuation)
-        text = re.sub(r'[^a-z0-9\s]', '', text)
+
+        # Use the pre-compiled regex engine
+        text = self.punctuation_stripper.sub('', text)
         # Split by whitespace and remove empty strings
         return [word for word in text.split() if word]
 
