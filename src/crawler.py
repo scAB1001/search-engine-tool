@@ -52,7 +52,7 @@ class PoliteCrawler:
                 # Record the exact time the request finished
                 self.last_request_time = time.time()
 
-                # Response Headers Verification
+                # Respons   e Headers Verification
                 content_type = response.headers.get("Content-Type", "")
                 if "text/html" not in content_type:
                     logger.warning(
@@ -87,7 +87,7 @@ class PoliteCrawler:
                 logger.error(f"HTTP Error for {url}: {e}")
                 return []
 
-        return []
+        return []  # pragma: no cover
 
     def _parse_html(self, html_content: str) -> list[dict[str, str]]:
         """

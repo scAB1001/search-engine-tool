@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from requests.exceptions import RequestException
+from requests.exceptions import ConnectionError, RequestException
 
 from src.crawler import PoliteCrawler
 
@@ -185,3 +185,24 @@ def test_crawler_rejects_non_html(mock_get: MagicMock) -> None:
     # It should immediately reject it without crashing or parsing
     assert results == []
     assert mock_get.call_count == 1
+
+
+@patch("src.crawler.time.sleep")
+def test_crawler_retries_on_connection_error(
+    mock_sleep: MagicMock,
+    mock_requests_get: MagicMock
+) -> None:
+    """Test that the crawler retries up to 3 times specifically on a ConnectionError."""
+    # Override the global fixture to simulate a connection refusal
+    mock_requests_get.side_effect = ConnectionError("Connection refused")
+
+    crawler = PoliteCrawler()
+    results = crawler.fetch_quotes("http://fake-url.com")
+
+    # It should fail gracefully, returning an empty list
+    assert results == []
+    # It should have attempted exactly 3 times
+    assert mock_requests_get.call_count == 3
+    # It should have slept for exactly 2 seconds between the first two failed attempts
+    assert mock_sleep.call_count == 2
+    mock_sleep.assert_called_with(2.0)
