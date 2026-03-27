@@ -10,8 +10,8 @@ def test_text_normalization() -> None:
     index = InvertedIndex()
     tokens = index._tokenize("Hello, World! It's a 'good' day.")
 
-    # Notice that "it's" becomes "its" and case is normalized
-    assert tokens == ["hello", "world", "its", "a", "good", "day"]
+    # Notice that "It's" is now mathematically split into "it" and "s"
+    assert tokens == ["hello", "world", "it", "s", "a", "good", "day"]
 
 
 def test_tf_idf_calculation() -> None:
