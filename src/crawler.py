@@ -2,6 +2,7 @@ import time
 
 import requests
 from bs4 import BeautifulSoup
+from bs4.filter import SoupStrainer
 
 from src.logger import logger
 
@@ -73,21 +74,37 @@ class PoliteCrawler:
         return []
 
     def _parse_html(self, html_content: str) -> list[dict[str, str]]:
-        """Extracts quote text and authors from the raw HTML using BeautifulSoup."""
-        soup = BeautifulSoup(html_content, "html.parser")
-        extracted_data = []
+        """
+        Parses HTML using lxml, SoupStrainer for memory efficiency,
+        and CSS selectors for precise extraction.
+        """
+        # Strain out navbars, footers, and scripts before RAM ingestion.
+        # Strain for quotes and the 'next' button so our loop can still paginate later.
+        strainer = SoupStrainer(class_=["quote", "next"])
 
-        # Target the specific CSS classes from https://quotes.toscrape.com/
-        quote_blocks = soup.find_all("div", class_="quote")
+        # Bypass the bottleneck by using 'html.parser' instead of the C-based 'lxml'
+        soup = BeautifulSoup(html_content, "lxml", parse_only=strainer)
 
-        for block in quote_blocks:
-            text_span = block.find("span", class_="text")
-            author_small = block.find("small", class_="author")
+        parsed_data = []
 
-            if text_span and author_small:
-                extracted_data.append({
-                    "text": text_span.get_text(strip=True),
-                    "author": author_small.get_text(strip=True)
+        # Use CSS Selectors (.select) instead of .find_all
+        for quote_block in soup.select(".quote"):
+
+            # Extract data with .stripped_strings generator
+            text_node = quote_block.select_one(".text")
+            text = " ".join(text_node.stripped_strings) if text_node else ""
+
+            author_node = quote_block.select_one(".author")
+            author = " ".join(
+                author_node.stripped_strings) if author_node else ""
+
+            if text and author:
+                parsed_data.append({
+                    "text": text,
+                    "author": author
                 })
 
-        return extracted_data
+            # Physically destroy the node to free RAM
+            quote_block.decompose()
+
+        return parsed_data
