@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from src.indexer import InvertedIndex

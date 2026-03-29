@@ -1,7 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
+
+# TODO: Test for RequestException / place in conftest
 from requests.exceptions import ConnectionError, RequestException
 
 from src.crawler import PoliteCrawler
