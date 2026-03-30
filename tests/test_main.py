@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from src.main import app
+from src.main import app, complete_word
 
 runner = CliRunner()
 
@@ -366,3 +366,28 @@ def test_cli_help_shows_rich_docstring() -> None:
     assert "Built with ❤️  by Andreas for COMP3011" in result.stdout
     assert "Okapi BM25" in result.stdout
     assert "Database Operations" in result.stdout  # Verifies Help Panels exist
+
+
+def test_complete_word_success(mock_index_file: Path, monkeypatch) -> None:
+    """Test that autocompletion returns matching words from the index."""
+    # We need to ensure get_index_path points to our mock file
+    # during the autocompletion call.
+    from src import main
+    monkeypatch.setattr(main, "get_index_path", lambda: mock_index_file)
+
+    # If 'good' is in your mock_index_file
+    suggestions = complete_word("go")
+    assert "good" in suggestions
+
+    # Test case-insensitivity and non-matches
+    assert len(complete_word("xyz")) == 0
+
+
+def test_complete_word_no_index(tmp_path: Path, monkeypatch) -> None:
+    """Test autocompletion handles missing index gracefully."""
+    from src import main
+    missing_path = tmp_path / "nowhere.json"
+    monkeypatch.setattr(main, "get_index_path", lambda: missing_path)
+
+    suggestions = complete_word("any")
+    assert suggestions == []

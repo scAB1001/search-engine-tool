@@ -1,3 +1,4 @@
+import json
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -140,10 +141,28 @@ def load() -> None:
     )
 
 
+def complete_word(incomplete: str) -> list[str]:
+    """Dynamically reads the index to suggest words to the user."""
+    path = get_index_path()
+    if not path.exists():
+        return []
+
+    # We only load the keys (words) to keep it fast
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+        words = data.get("index", {}).keys()
+
+    return [word for word in words if word.startswith(incomplete.lower())]
+
 @app.command("print", rich_help_panel="Search Operations")
 def print_word(
-    words: Annotated[list[str], typer.Argument(
-        help="The word to print stats for.")]
+    words: Annotated[
+        list[str],
+        typer.Argument(
+            help="The word to print stats for.",
+            autocompletion=complete_word
+        )
+    ]
 ) -> None:
     """[yellow]Inspect[/yellow] specific word inverted index statistics."""
     path = get_index_path()
