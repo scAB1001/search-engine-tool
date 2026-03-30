@@ -45,4 +45,12 @@ Features include: creating an inverted index of all word occurrences, allow the 
 
 This project enforces a strict **80% test coverage** requirement. The CI/CD pipeline actively monitors branch health, and test analytics are visualised below via Codecov.
 
+```bash
+uv run search-engine build
+uv run search-engine load
+uv run search-engine print nonsense
+uv run search-engine find good friends
+
+```
+
 ## Any dependencies and how to install them
