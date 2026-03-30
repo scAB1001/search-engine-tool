@@ -41,7 +41,11 @@ def test_cli_build_happy_path(
     assert result.exit_code == 0
     assert "Crawl complete" in result.stdout
     mock_index.add_document.assert_called_once_with(
-        "page_1_quote_0", "A quote An Author test"
+        doc_id="page_1_quote_0",
+        text="A quote",
+        author="An Author",
+        tags=["test"],
+        url="https://quotes.toscrape.com/"
     )
     mock_index.save.assert_called_once()
 
@@ -103,7 +107,12 @@ def test_cli_build_max_pages_limit(
     # Verify the indexer was only called for that single page despite infinite crawler
     mock_index = mock_index_cls.return_value
     mock_index.add_document.assert_called_once_with(
-        "page_1_quote_0", "Infinite quote Bot ")
+        doc_id="page_1_quote_0",
+        text="Infinite quote",
+        author="Bot",
+        tags=[],
+        url="https://quotes.toscrape.com/"
+    )
 
 # ==========================================
 # TEST COMMAND: LOAD

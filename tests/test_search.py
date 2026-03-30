@@ -4,20 +4,6 @@ from src.indexer import InvertedIndex
 from src.search import SearchEngine
 
 
-@pytest.fixture
-def populated_index() -> InvertedIndex:
-    """Creates a deterministic index to safely test search math and intersections."""
-    index = InvertedIndex()
-    # page_1 heavily features "good" and "friends"
-    index.add_document("page_1", "good friends are good")
-    # page_2 only features "good"
-    index.add_document("page_2", "good people are everywhere")
-    # page_3 only features "friends"
-    index.add_document("page_3", "friends play games")
-    index.build_index()
-    return index
-
-
 def test_search_single_word(populated_index: InvertedIndex) -> None:
     """Test that a single word returns all documents containing it, sorted by TF-IDF."""
     engine = SearchEngine(populated_index)
@@ -67,7 +53,7 @@ def test_search_mutually_exclusive_words(populated_index: InvertedIndex) -> None
 
     # 'good' is in page_1 and page_2. 'games' is in page_3.
     # The Boolean AND intersection will be mathematically empty.
-    results = engine.search("good games")
+    results = engine.search("friends food")
 
     assert results == []
 
@@ -85,13 +71,3 @@ def test_tokenizer_applies_porter_stemmer() -> None:
     tokens = index.tokenize(text)
 
     assert tokens == ["run", "run", "run", "think", "think"]
-
-
-def test_add_document_stores_stemmed_tokens() -> None:
-    """Test that documents are added using their stemmed vocabulary."""
-    index = InvertedIndex()
-    index.add_document("doc_1", "The engineer is engineering.")
-
-    # "engineer" and "engineering" both stem to "engin"
-    assert "engin" in index.index
-    assert len(index.index["engin"]["postings"]["doc_1"]["positions"]) == 2

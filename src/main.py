@@ -51,23 +51,26 @@ def build(
                 f"[bold green]Scraping page {page_num}: {current_url}...")
 
             result = crawler.fetch_quotes(current_url)
-            quotes_List = result.get("quotes", [])
+            quotes_list = result.get("quotes", [])
             next_page = result.get("next_page")
 
-            if not quotes_List:
+            if not quotes_list:
                 console.print(
                     f"[yellow]No quotes found on {current_url}. "
                     f"Crawl complete.[/yellow]")
                 break
 
-            for i, quote in enumerate(quotes_List):
+            for i, quote in enumerate(quotes_list):
                 doc_id = f"page_{page_num}_quote_{i}"
-                text = quote.get("text", "")
-                author = quote.get("author", "")
-                tags = " ".join(quote.get("tags", []))
 
-                combined_text = f"{text} {author} {tags}"
-                index.add_document(doc_id, combined_text)
+                # Pass the raw structured data directly to the indexer!
+                index.add_document(
+                    doc_id=doc_id,
+                    text=quote.get("text", ""),
+                    author=quote.get("author", ""),
+                    tags=quote.get("tags", []),
+                    url=current_url
+                )
 
             if next_page:
                 current_url = f"https://quotes.toscrape.com{next_page}"

@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.indexer import InvertedIndex
+
 
 @pytest.fixture
 def mock_html_response():
@@ -140,3 +142,17 @@ def mock_index_file(tmp_path: Path) -> Path:
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(dummy_data, f)
     return file_path
+
+
+@pytest.fixture
+def populated_index() -> InvertedIndex:
+    """Provides a pre-built index for testing search logic."""
+    index = InvertedIndex()
+    index.add_document("page_1", "good friends are good",
+                       "Author A", ["tag1"], "http://url1")
+    index.add_document("page_2", "good food is tasty",
+                       "Author B", ["tag2"], "http://url2")
+    index.add_document("page_3", "bad enemies are bad",
+                       "Author C", ["tag3"], "http://url3")
+    index.build_index()
+    return index
