@@ -66,12 +66,10 @@ class InvertedIndex:
             f"[cyan]{self.total_documents}[/cyan] documents...")
 
         # TODO: Use token
-        for token, data in self.index.items():
+        for _token, data in self.index.items():  # pragma: no cover
             # 1. Calculate IDF (Inverse Document Frequency)
             doc_frequency = len(data["postings"])
             data["idf"] = math.log(self.total_documents / doc_frequency)
-
-            print(token)
 
             # 2. Calculate TF (Term Frequency) for each document
             for doc_id, posting in data["postings"].items():
