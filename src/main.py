@@ -282,7 +282,9 @@ def find(
                 f"ID: {doc_id}"
             ),
             title_align="left",
-            border_style="green"
+            border_style="green",
+            padding=(1, 2),
+            style="on grey11"
         )
         console.print(panel)
         console.print()
