@@ -1,3 +1,4 @@
+
 from src.indexer import InvertedIndex
 from src.logger import logger
 
