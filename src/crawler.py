@@ -32,8 +32,9 @@ class PoliteCrawler:
         time_to_wait = self.delay_seconds - elapsed_time
 
         if time_to_wait > 0:
-            logger.info(
-                f"Politeness window active. Sleeping for {time_to_wait:.2f} seconds...")
+            logger.debug(
+                f"Politeness window active. "
+                f"Sleeping for [yellow]{time_to_wait:.2f}s[/yellow].")
             time.sleep(time_to_wait)
 
     def fetch_quotes(self, url: str) -> dict[str, Any]:
@@ -58,35 +59,36 @@ class PoliteCrawler:
                 content_type = response.headers.get("Content-Type", "")
                 if "text/html" not in content_type:
                     logger.warning(
-                        f"Skipping {url}: Expected text/html, got {content_type}")
+                        f"Skipping [cyan]{url}[/cyan]: Expected HTML, got "
+                        f"[yellow]{content_type}[/yellow]")
                     return {"quotes": [], "next_page": None}
 
                 return self._parse_html(response.text)
 
-            except requests.exceptions.Timeout as e:
+            except requests.exceptions.Timeout:
                 # Granular Exception Handling - 10s wait for Timeouts
                 logger.warning(
-                    f"Timeout on attempt {attempt}/{max_retries} "
-                    f"for {url}: {e}. Waiting 10s.")
+                    f"Timeout fetching [cyan]{url}[/cyan]"
+                    f"(Attempt {attempt}/{max_retries}). Waiting 10s...")
                 if attempt == max_retries:
                     logger.error(f"Max retries reached for {url}. Abandoning.")
                     return {"quotes": [], "next_page": None}
                 time.sleep(10.0)
 
-            except requests.exceptions.ConnectionError as e:
+            except requests.exceptions.ConnectionError:
                 # Granular Exception Handling - 2s wait for Connection Errors
                 logger.warning(
-                    f"Connection error on attempt {attempt}/{max_retries} "
-                    f"for {url}: {e}"
-                )
+                    f"Connection error fetching [cyan]{url}[/cyan] "
+                    f"(Attempt {attempt}/{max_retries}). Waiting 2s...")
                 if attempt == max_retries:
-                    logger.error(f"Max retries reached for {url}. Abandoning.")
+                    logger.error(
+                        f"Failed to fetch [cyan]{url}[/cyan]: Max retries exhausted.")
                     return {"quotes": [], "next_page": None}
                 time.sleep(2.0)
 
             except requests.exceptions.HTTPError as e:
                 # 4xx or 5xx errors. Pointless retrying a 404.
-                logger.error(f"HTTP Error for {url}: {e}")
+                logger.error(f"HTTP Error for [cyan]{url}[/cyan]: {e}")
                 return {"quotes": [], "next_page": None}
 
         # TODO: Create annotation for the empty quote state and others
@@ -109,9 +111,11 @@ class PoliteCrawler:
                 # CRITICAL: Record the exact time the request finished
                 self.last_request_time = time.time()
 
-                if "text/html" not in response.headers.get("Content-Type", ""):
+                content_type = response.headers.get("Content-Type", "")
+                if "text/html" not in content_type:
                     logger.warning(
-                        f"Skipping {author_url}: Expected text/html")
+                        f"Skipping [cyan]{author_url}[/cyan]: Expected HTML, "
+                        f"got [yellow]{content_type}[/yellow]")
                     return {} # pragma: no cover
 
                 # Memory Saver: Only parse the author-details div
@@ -126,7 +130,8 @@ class PoliteCrawler:
                 # EDGE CASE DEFENSE: The "False Positive" Trap
                 if not name:
                     logger.warning(
-                        f"False Positive detected at {author_url}. Empty author data.")
+                        f"False Positive at [cyan]{author_url}[/cyan]: "
+                        f"Empty author data.")
                     return {}
 
                 born_date_node = soup.select_one(".author-born-date")
@@ -143,13 +148,14 @@ class PoliteCrawler:
                         if description_node else ""
                 }
 
-            except requests.exceptions.Timeout as e:
+            except requests.exceptions.Timeout:
                 logger.warning(
-                    f"Timeout on attempt {attempt}/{max_retries} "
-                    f"for author {author_url}: {e}. Waiting 10s.")
+                    f"Timeout fetching [cyan]{author_url}[/cyan] "
+                    f"(Attempt {attempt}/{max_retries}). Waiting 10s...")
                 if attempt == max_retries:
                     logger.error(
-                        f"Max retries reached for author {author_url}. Abandoning.")
+                        f"Failed to fetch [cyan]{author_url}[/cyan]: "
+                        f"Max retries exhausted.")
                     return {}
                 time.sleep(10.0)
 
@@ -159,12 +165,13 @@ class PoliteCrawler:
                     f"for author {author_url}: {e}")
                 if attempt == max_retries:
                     logger.error(
-                        f"Max retries reached for author {author_url}. Abandoning.")
+                        f"Failed to fetch [cyan]{author_url}[/cyan]: "
+                        f"Max retries exhausted.")
                     return {}
                 time.sleep(2.0)
 
             except requests.exceptions.HTTPError as e:
-                logger.error(f"HTTP Error for author {author_url}: {e}")
+                logger.error(f"HTTP Error for [cyan]{author_url}[/cyan]: {e}")
                 return {}
 
         return {}  # pragma: no cover
@@ -176,7 +183,8 @@ class PoliteCrawler:
         """
         # EDGE CASE DEFENSE: Out-of-Bounds Pagination
         if "No quotes found!" in html_content:
-            logger.info("Pagination boundary reached (No quotes found!).")
+            logger.info(
+                "Pagination boundary reached: [green]No quotes found![/green]")
             return {"quotes": [], "next_page": None}
 
         strainer = SoupStrainer(class_=["quote", "pager"])
