@@ -74,6 +74,37 @@ def test_cli_build_premature_break(
     assert "Crawl complete" in result.stdout
 
 
+@patch("src.main.get_index_path")
+@patch("src.main.InvertedIndex")
+@patch("src.main.PoliteCrawler")
+def test_cli_build_max_pages_limit(
+    mock_crawler_cls: MagicMock,
+    mock_index_cls: MagicMock,
+    mock_get_path: MagicMock,
+    tmp_path: Path
+) -> None:
+    """Test the 'build' command safely aborts when hitting the --max-pages limit."""
+    mock_crawler = mock_crawler_cls.return_value
+
+    # Simulate an infinite loop of pages. The crawler never returns next_page: None.
+    mock_crawler.fetch_quotes.return_value = {
+        "quotes": [{"text": "Infinite quote", "author": "Bot", "tags": []}],
+        "next_page": "/page/next/"
+    }
+
+    mock_get_path.return_value = tmp_path / "test_index.json"
+
+    # Pass the --max-pages flag set to 1
+    result = runner.invoke(app, ["build", "--max-pages", "1"])
+
+    assert result.exit_code == 0
+    assert "Max pages limit (1) reached" in result.stdout
+
+    # Verify the indexer was only called for that single page despite infinite crawler
+    mock_index = mock_index_cls.return_value
+    mock_index.add_document.assert_called_once_with(
+        "page_1_quote_0", "Infinite quote Bot ")
+
 # ==========================================
 # TEST COMMAND: LOAD
 # ==========================================
