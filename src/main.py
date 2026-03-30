@@ -175,8 +175,8 @@ def find(
         # Build the snippet layout
         content = f"[italic]\"{doc.get('text', 'No text available.')}\"[/italic]\n\n"
         content += f"[bold cyan]Author:[/bold cyan] {doc.get('author', 'Unknown')}\n"
-        content += "[bold cyan]URL:[/bold cyan] "
-        f"[blue underline]{doc.get('url', '#')}[/blue underline]"
+        content += f"[bold cyan]URL:[/bold cyan] [blue underline]{doc.get('url', '#')}"
+        content += "[/blue underline]"
 
         panel = Panel(
             content,
