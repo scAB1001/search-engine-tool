@@ -192,7 +192,7 @@ def test_cli_find_success(mock_get_path: MagicMock, mock_index_file: Path) -> No
     result = runner.invoke(app, ["find", "good", "--strategy", "bm25"])
 
     assert result.exit_code == 0
-    assert "matching documents for 'good'" in result.stdout
+    assert "matching document(s) for good" in result.stdout
     assert "page_1_quote_0" in result.stdout
     assert "(BM25)" in result.stdout
 
