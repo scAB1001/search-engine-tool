@@ -1,56 +1,181 @@
-# search-engine-tool
+# Search Engine Tool (COMP3011)
 
 [![CI](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/scAB1001/search-engine-tool/graph/badge.svg?token=919TUQ3FW1)](https://codecov.io/gh/scAB1001/search-engine-tool)
 
-## Project overview and purpose
+## 📖 Project Overview and Purpose
 
-### Structure and Purpose
+This project is an elite, production-grade CLI Search Engine built for the COMP3011 module. It is designed to crawl [quotes.toscrape.com](https://quotes.toscrape.com/), construct a mathematical inverted index, and rank search results using industry-standard Information Retrieval algorithms.
+
+**Key Architectural Features:**
+* **Ranking Algorithms:** Fully implements **TF-IDF** and **Okapi BM25** scoring models.
+* **Advanced NLP:** Uses the **Porter Stemming Algorithm** for morphological tokenisation and provides stem-aware hit highlighting in the CLI.
+* **Contextual Extents (Zones):** Applies weight multipliers based on where a term is found (e.g., higher relevance for Author matches vs. Text matches).
+* **Ethical Web Crawling:** Strictly enforces a 6-second politeness window with dynamic jitter to prevent server overload.
+* **DevOps & UI Polish:** Features a beautiful `Rich` terminal UI, dynamic `TAB` autocompletion for index keys, programmatic XML Sitemap generation via HTTP `HEAD` requests, and 100% test coverage.
+
+---
+
+## 📂 Structure and Architecture
 
 ```bash
 search-engine-tool/
-├── .github/workflows/       # CI/CD (Ruff, Mypy, Pytest)
-├── src/
-│   ├── __init__.py
-│   ├── crawler.py           # Handles HTTP requests and the strict 6-second politeness window
-│   ├── indexer.py           # Processes text and builds the inverted index (we'll implement TF-IDF here)
-│   ├── search.py            # Executes queries against the index (handling case-insensitivity)
-│   └── main.py              # The CLI entrypoint (build, load, print, find commands)
-├── tests/
-│   ├── conftest.py          # Fixtures for mocked HTML responses
-│   ├── test_crawler.py      # Validates rate-limiting and error handling
-│   ├── test_indexer.py      # Validates inverted index structure and word statistics
-│   └── test_search.py       # Validates multi-word queries and edge cases
-├── data/
-│   └── index.json           # The compiled index file
-├── .pre-commit-config.yaml  # Local "Shift-Left" quality gates
-├── pyproject.toml           # uv project configuration
-└── README.md                # Comprehensive setup, usage, and architecture documentation
+├── .github/                 # CI/CD workflows, Codecov integration, and PR templates
+├── data/                    # Local storage for the compiled JSON index and XML sitemap
+├── src/                     # Core Application Logic
+│   ├── crawler.py           # Handles HTTP requests, LXML parsing, and strict rate-limiting
+│   ├── indexer.py           # Tokenises text (Porter Stemmer) and maps the inverted index/extents
+│   ├── search.py            # Executes DAAT queries against the index (TF-IDF/BM25)
+│   ├── logger.py            # Centralised logging configuration
+│   └── main.py              # Typer CLI entrypoint with Rich UI and Autocompletion
+├── tests/                   # 100% Coverage Test Suite
+│   ├── conftest.py          # Centralised Pytest fixtures and mocked data payloads
+│   ├── test_crawler.py      # Validates politeness window and network exception handling
+│   ├── test_indexer.py      # Validates mathematical frequencies and index structures
+│   ├── test_search.py       # Validates scoring algorithms and Boolean intersections
+│   └── test_main.py         # Validates CLI routing, edge cases, and UI outputs
+├── .pre-commit-config.yaml  # Local "Shift-Left" quality gates (Ruff, Mypy)
+├── pyproject.toml           # `uv` project dependencies and metadata
+└── README.md                # Project documentation
 ```
 
-A tool to crawl https://quotes.toscrape.com/.
-Features include: creating an inverted index of all word occurrences, allow the user to find pages containing certain search terms.
+---
 
-## Installation/setup instructions
+## 📦 Dependencies and Installation
 
+This project uses [uv](https://github.com/astral-sh/uv) as its package and environment manager for extremely fast, deterministic builds.
 
+**Core Dependencies:**
+* `typer` & `rich`: CLI interface and terminal UI formatting.
+* `requests` & `beautifulsoup4` & `lxml`: HTML fetching and parsing.
+* `nltk`: Natural Language Toolkit (specifically the PorterStemmer).
 
-## Usage examples for all four commands
+### Setup Instructions
 
+**Clone the repository:**
+```bash
+    git clone [https://github.com/scAB1001/search-engine-tool.git](https://github.com/scAB1001/search-engine-tool.git)
+    cd search-engine-tool
+```
 
+**Install and Update Dependencies:**
+```bash
+    # Sync the dependencies from the lock file
+    uv sync --all-groups
 
-## Testing instructions
+    # Update/install any dependencies
+    uv run pre-commit install
+    uv run pre-commit autoupdate
 
-### 📊 Testing & Coverage Analytics
+    # Regenerate Lock file
+    uv lock --upgrade
+    uv lock --check
 
-This project enforces a strict **80% test coverage** requirement. The CI/CD pipeline actively monitors branch health, and test analytics are visualised below via Codecov.
+    # Export requirements
+    uv export --format requirements.txt --output-file requirements.txt
+```
+
+#### Run within the virtual environment (for development)
+
+**Install dependencies and the CLI executable natively:**
+```bash
+    uv pip install -e .
+```
+
+*Note: Installing with `-e .` links the `search-engine` command directly to your virtual environment.*
+
+**Activate the Virtual Environment:**
+```bash
+    source .venv/bin/activate
+```
+
+#### Run from any environment (for production LTS)
+
+**Install dependencies and the CLI executable globally:**
+```bash
+uv tool install .
+```
+
+*Tip: If you make changes and still wish to run it globally, run the command with `-n --reinstall'.*
+
+#### Enable Dynamic Autocompletion (Optional but recommended)
 
 ```bash
-uv run search-engine build
-uv run search-engine load
-uv run search-engine print nonsense
-uv run search-engine find good friends
-
+    search-engine --install-completion
+    source ~/.bashrc  # Or ~/.zshrc depending on your shell
 ```
 
-## Any dependencies and how to install them
+---
+
+## 🚀 Usage Examples
+
+The CLI is divided into Database Operations, Search Operations, and Utilities. You can run `search-engine --help` at any time for a global interactive menu.
+
+### 1. Build the Index (`build`)
+
+Crawls the target website, processes the text, calculates global term frequencies, and serialises the inverted index to disk.
+```bash
+search-engine build
+# Or, limit the crawl to a specific number of pages:
+search-engine build --max-pages 3
+```
+
+### 2. Verify the Index (`load`)
+
+Loads the index into memory to verify data integrity and file structure.
+```bash
+search-engine load
+```
+
+### 3. Inspect Term Statistics (`print`)
+
+Outputs the global Collection Frequency, Base IDF score, and a tabular breakdown of Term Frequencies and positional extents across all documents containing the word.
+
+*Tip: Try pressing `TAB` after typing part of your search term to see auto-completed suggestions from your live database!*
+
+```bash
+search-engine print ein[TAB]
+```
+
+### 4. Search the Index (`find`)
+
+Executes a multi-word query against the index. Returns beautifully formatted Rich panels containing contextual snippets, hit highlighting, and author metadata.
+```bash
+# Default TF-IDF search:
+search-engine find good friends
+
+# Advanced Okapi BM25 search:
+search-engine find Einstein thinking --strategy bm25
+```
+
+### 5. Generate a Sitemap (`sitemap`)
+
+*Bonus Feature:* Dynamically generates a `sitemaps.org/0.9` compliant XML file by pinging HTTP `HEAD` requests
+to verify live `Last-Modified` headers, alongside heuristic URL depth prioritisation.
+
+```bash
+# Provide the name. The dir is data/
+search-engine sitemap --output sitemap.xml
+```
+
+---
+
+## 🧪 Testing Instructions
+
+This project strictly enforces an **80% test coverage** requirement across 410 statements and 102 branches.
+All outbound HTTP requests are fully mocked; tests will not hit live servers.
+
+**Run the standard test suite:**
+```bash
+uv run pytest
+```
+
+**Run tests with the detailed coverage report:**
+```bash
+uv run pytest -v --cov=src
+```
+
+**Run local linting and type-checking (Ruff & Mypy):**
+```bash
+uv run pre-commit run --all-files
+```

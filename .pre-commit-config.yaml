@@ -14,6 +14,10 @@ repos:
       - id: check-shebang-scripts-are-executable
       - id: check-yaml
       - id: check-toml
+      - id: check-json
+      - id: check-xml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.8
@@ -34,6 +38,7 @@ repos:
           - "types-requests"
           - "beautifulsoup4"
           - "typer"
+          - "types-lxml"
         args: [
           --strict,
           --ignore-missing-imports,
@@ -48,7 +53,7 @@ repos:
         exclude: ^tests/
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.11
+    rev: v1.7.12
     hooks:
       - id: actionlint
         name: Check Syntax for Workflow File

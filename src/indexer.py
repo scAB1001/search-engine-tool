@@ -52,6 +52,7 @@ class InvertedIndex:
         self.document_registry[doc_id] = {
             "text": text,
             "author": author,
+            "tags": tags,
             "url": url,
             "length": doc_length
         }

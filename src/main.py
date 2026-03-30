@@ -1,3 +1,5 @@
+import json
+import re
 import time
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
@@ -17,10 +19,31 @@ from src.crawler import PoliteCrawler
 from src.indexer import InvertedIndex
 from src.search import SearchEngine, SearchStrategy
 
-app = typer.Typer(help="Search Engine Tool for quotes.toscrape.com")
+app = typer.Typer(
+    help="[bold cyan]Quotes Search Engine[/bold cyan] - COMP3011 Coursework 2.",
+    rich_markup_mode="rich",
+    epilog="Built with :red_heart-emoji:  by Andreas for COMP3011",
+)
+
 console = Console()
 
 APP_NAME = "search-engine-tool"
+
+
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context) -> None:
+    """
+    [bold green]Welcome to the Quote Search Engine Tool.[/bold green]
+
+    This tool crawls, indexes, and ranks quotes using industry-standard
+    algorithms like [yellow]TF-IDF[/yellow] and [yellow]Okapi BM25[/yellow].
+    """
+    if ctx.invoked_subcommand is None:
+        console.print(Panel(
+            "[bold cyan]Search Engine CLI v3.0[/bold cyan]\n"
+            "Run [green]--help[/green] to see available commands.",
+            expand=False
+        ))
 
 
 def get_index_path() -> Path:
@@ -31,7 +54,7 @@ def get_index_path() -> Path:
     return path
 
 
-@app.command()
+@app.command(rich_help_panel="Database Operations")
 def build(
     max_pages: int = typer.Option(
         0,
@@ -40,14 +63,17 @@ def build(
         help="Maximum number of pages to crawl (0 for unlimited)."
     )
 ) -> None:
-    """Crawls the website, builds the TF-IDF index, and saves it to disk."""
+    """[green]Crawl[/green] the website and build the index."""
     crawler = PoliteCrawler()
     index = InvertedIndex()
 
     current_url = "https://quotes.toscrape.com/"
     page_num = 1
 
-    with console.status("[bold green]Crawling quotes.toscrape.com...") as status:
+    with console.status(
+        "[bold green]Crawling quotes.toscrape.com...",
+        spinner="dots12"
+    ) as status:
         while current_url:
             # boundary management check
             if max_pages > 0 and page_num > max_pages:
@@ -57,7 +83,8 @@ def build(
                 break
 
             status.update(
-                f"[bold green]Scraping page {page_num}: {current_url}...")
+                f"[bold green]Scraping page {page_num}[/bold green] "
+                f"| [dim]{current_url}[/dim]")
 
             result = crawler.fetch_quotes(current_url)
             quotes_list = result.get("quotes", [])
@@ -97,9 +124,9 @@ def build(
         f"[bold green]Success![/bold green] Index saved to {save_path}")
 
 
-@app.command()
+@app.command(rich_help_panel="Database Operations")
 def load() -> None:
-    """Loads the index from the file system to verify integrity."""
+    """[blue]Verify[/blue] the integrity of the saved index."""
     path = get_index_path()
     if not path.exists():
         console.print(
@@ -114,9 +141,30 @@ def load() -> None:
     )
 
 
-@app.command("print")
-def print_word(word: str) -> None:
-    """Prints the inverted index statistics for a particular word."""
+def complete_word(incomplete: str) -> list[str]:
+    """Dynamically reads the index to suggest words to the user."""
+    path = get_index_path()
+    if not path.exists():
+        return []
+
+    # We only load the keys (words) to keep it fast
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+        words = data.get("index", {}).keys()
+
+    return [word for word in words if word.startswith(incomplete.lower())]
+
+@app.command("print", rich_help_panel="Search Operations")
+def print_word(
+    words: Annotated[
+        list[str],
+        typer.Argument(
+            help="The word to print stats for.",
+            autocompletion=complete_word
+        )
+    ]
+) -> None:
+    """[yellow]Inspect[/yellow] specific word inverted index statistics."""
     path = get_index_path()
     if not path.exists():
         console.print(
@@ -126,34 +174,45 @@ def print_word(word: str) -> None:
     index = InvertedIndex()
     index.load(str(path))
 
-    word_clean = word.lower().strip()
+    # Join the list of words into a single string (handles no-quote terminal inputs)
+    word_clean = " ".join(words).lower().strip()
+
     if word_clean not in index.index:
         console.print(
-            f"[yellow]Word '{word}' not found in the index.[/yellow]")
+            f"[yellow]Word '{word_clean}' not found in the index.[/yellow]")
         return
 
     data = index.index[word_clean]
-    console.print(f"\n[bold cyan]Word:[/bold cyan] {word_clean}")
-    console.print(f"[bold cyan]IDF Score:[/bold cyan] {data['idf']:.4f}")
-    console.print(
-        f"[bold cyan]Found in {len(data['postings'])} documents.[/bold cyan]\n")
 
-    table = Table("Document ID", "Term Frequency (TF)", "Positions")
+    content = f"\n[bold cyan] Word:[/bold cyan]\t\t\t[italic]{word_clean}[/italic]\n"
+    content += f"[bold cyan] Base Score:[/bold cyan]\t\t{data['idf']:.4f}\n"
+    content += "[bold cyan] Collection Frequency:[/bold cyan]\t"
+    content += f"{data.get('collection_frequency', 0)} occurrences "
+    content += f"across {len(data['postings'])} documents.\n"
+
+    console.print(content)
+
+    table = Table("Document ID", "Term Frequency (TF)", "Positions", "Author Context")
     for doc_id, stats in data["postings"].items():
-        table.add_row(doc_id, f"{stats['tf']:.4f}", str(stats["positions"]))
+        # Fetch the author from the document registry, defaulting to "Unknown"
+        author = index.document_registry.get(
+            doc_id, {}).get("author", "Unknown")
+        table.add_row(doc_id, f"{stats['tf']:.4f}",
+                      str(stats["positions"]), author)
+
     console.print(table)
 
 
-@app.command()
+@app.command(rich_help_panel="Search Operations")
 def find(
-    query: Annotated[str, typer.Argument(help="The search query to execute.")],
+    query: Annotated[list[str], typer.Argument(help="The search query to execute.")],
     strategy: Annotated[
         SearchStrategy,
         typer.Option("--strategy", "-s",
                      help="The mathematical ranking algorithm to use.")
     ] = SearchStrategy.TF_IDF
 ) -> None:
-    """Searches the built index and returns ranked snippets."""
+    """[magenta]Search[/magenta] loaded index using TF-IDF or Okapi BM25."""
     path = get_index_path()
     if not path.exists():
         console.print(
@@ -164,44 +223,80 @@ def find(
     index.load(str(path))
     engine = SearchEngine(index)
 
+    # Join the list of words into a single query string
+    query_str = " ".join(query)
+
     with console.status(f"[bold green]Searching via {strategy.value.upper()}..."):
-        results = engine.search(query, strategy=strategy)
+        results = engine.search(query_str, strategy=strategy)
 
     if not results:
-        console.print(f"[yellow]No results found for '{query}'.[/yellow]")
+        console.print(f"[yellow]No results found for '{query_str}'.[/yellow]")
         return
 
     console.print(
-        f"\n[bold green]Found {len(results)} matching documents for '{query}':"
-        f"[/bold green]\n")
+        f"\n[bold green]Found {len(results)} matching document(s) for "
+        f"[italic]{query_str}[/italic]:[/bold green]\n")
 
-    # Print the top 5 results as beautiful Rich Panels
+    # Pre-tokenize and stem the query to find what we are looking for
+    query_stems = set(index.tokenize(query_str))
+
     for rank, (doc_id, score) in enumerate(results[:5], 1):
         doc = index.document_registry.get(doc_id, {})
+        raw_text = doc.get('text', 'No text available.')
 
-        # Build the snippet layout
-        content = f"[italic]\"{doc.get('text', 'No text available.')}\"[/italic]\n\n"
-        content += f"[bold cyan]Author:[/bold cyan] {doc.get('author', 'Unknown')}\n"
-        content += f"[bold cyan]URL:[/bold cyan] [blue underline]{doc.get('url', '#')}"
-        content += "[/blue underline]"
+        # Highlight matches in the raw text
+        # We split by non-word characters to preserve punctuation but check stems
+        words = re.split(r'(\W+)', raw_text)
+        highlighted_text = ""
+
+        # Loop over split text: for each word, check its stem against the query stems
+        for part in words:
+            # If it's a word, check its stem
+            if re.match(r'\w+', part):
+                stemmed_part = index.stemmer.stem(part.lower())
+
+                # Apply Rich bold/yellow styling to the matched word
+                if stemmed_part in query_stems:
+                    highlighted_text += f"[bold yellow]{part}[/bold yellow]"
+                else:
+                    highlighted_text += part
+            else:
+                # Punctuation or whitespace, append it
+                highlighted_text += part
+
+        # Safely extract and format tags
+        tags_list = doc.get("tags", [])
+        tags_str = ", ".join(tags_list) if tags_list else "None"
+
+        # Construct the content using the highlighted_text
+        content = f"[italic]{highlighted_text}[/italic]\n\n"
+        content += f"[bold cyan]Author:[/bold cyan]\t{doc.get('author', 'Unknown')}\n"
+        content += f"[bold cyan]Tags:[/bold cyan]\t[ {tags_str} ]\n"
+        content += "[bold cyan]URL:[/bold cyan]\t"
+        content += f"[blue underline]{doc.get('url', '#')}[/blue underline]"
 
         panel = Panel(
             content,
-            title=f"Rank {rank} | Score: {score:.4f} | ID: {doc_id}",
+            title=(
+                f"Rank {rank} | Score: {score:.4f} ({strategy.value.upper()}) | "
+                f"ID: {doc_id}"
+            ),
             title_align="left",
-            border_style="green"
+            style="on grey15",
+            border_style="green",
+            padding=(1, 2),
         )
         console.print(panel)
-        console.print()  # Add spacing between results
+        console.print()
 
 
-@app.command()
+@app.command(rich_help_panel="General Utilities")
 def sitemap(
     output_file: Annotated[str, typer.Option(
         "--output", "-o", help="The output XML file path.")] = "sitemap.xml"
 ) -> None:
     """
-    Generates a professional XML sitemap by dynamically verifying live HTTP headers.
+    [cyan]Sitemap[/cyan] XML generated by dynamically verifying live HTTP headers.
     """
     path = get_index_path()
     if not path.exists():

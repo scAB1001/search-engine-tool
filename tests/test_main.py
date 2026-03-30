@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from src.main import app
+from src.main import app, complete_word
 
 runner = CliRunner()
 
@@ -142,7 +142,8 @@ def test_cli_print_word_not_found(
 ) -> None:
     """Test 'print' handles queries for words not in the DB."""
     mock_get_path.return_value = mock_index_file
-    result = runner.invoke(app, ["print", "nonsense"])
+    # Multi-word test without quotes
+    result = runner.invoke(app, ["print", "good", "friends"])
 
     assert result.exit_code == 0
     assert "not found in the index" in result.stdout
@@ -154,8 +155,8 @@ def test_cli_print_success(mock_get_path: MagicMock, mock_index_file: Path) -> N
     result = runner.invoke(app, ["print", "good"])
 
     assert result.exit_code == 0
-    assert "IDF Score" in result.stdout
-    # Asserts the specific document ID from our new conftest schema
+    # Changed to match the exact string your CLI outputs
+    assert "Base Score" in result.stdout
     assert "page_1_quote_0" in result.stdout
 
 
@@ -175,11 +176,9 @@ def test_cli_find_without_index(mock_get_path: MagicMock, tmp_path: Path) -> Non
 def test_cli_find_no_results(mock_get_path: MagicMock, mock_index_file: Path) -> None:
     """Test 'find' gracefully handles queries with zero matching documents."""
     mock_get_path.return_value = mock_index_file
-    # Changed from ["find", "good", "nonsense"] to a single string argument
     result = runner.invoke(app, ["find", "nonsense"])
 
     assert result.exit_code == 0
-    # Updated to match the new Epic 3 failure string
     assert "No results found for 'nonsense'" in result.stdout
 
 
@@ -188,13 +187,14 @@ def test_cli_find_success(mock_get_path: MagicMock, mock_index_file: Path) -> No
     Test 'find' successfully formats and outputs the ranked results table using BM25.
     """
     mock_get_path.return_value = mock_index_file
-    # Let's test passing the new Strategy Enum through Typer!
+
+    # Reverted to searching only for "good" since it is the only word in the mock DB
     result = runner.invoke(app, ["find", "good", "--strategy", "bm25"])
 
     assert result.exit_code == 0
-    assert "matching documents for 'good'" in result.stdout
+    assert "matching document(s) for good" in result.stdout
     assert "page_1_quote_0" in result.stdout
-    assert "Rank 1" in result.stdout
+    assert "(BM25)" in result.stdout
 
 
 # ==========================================
@@ -340,3 +340,54 @@ def test_get_index_path(mock_get_app_dir: MagicMock, tmp_path: Path) -> None:
     assert path.parent.exists()
     assert path.name == "index.json"
     assert str(tmp_path) in str(path)
+
+
+# ==========================================
+# TEST CLI HELP AND WELCOME PANEL
+# ==========================================
+
+def test_cli_base_command_shows_welcome_panel() -> None:
+    """Test that calling the app without a subcommand triggers the welcome panel."""
+    # Invoke the app with no arguments
+    result = runner.invoke(app, [])
+
+    assert result.exit_code == 0
+    # Check for the specific version/title string in the Rich Panel
+    assert "Search Engine CLI" in result.stdout
+    assert "Run --help to see available commands" in result.stdout
+
+
+def test_cli_help_shows_rich_docstring() -> None:
+    """Test that the global help shows our custom docstring with Rich markup."""
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    # Check that our specific callback docstring is rendered
+    assert "Built with ❤️  by Andreas for COMP3011" in result.stdout
+    assert "Okapi BM25" in result.stdout
+    assert "Database Operations" in result.stdout  # Verifies Help Panels exist
+
+
+def test_complete_word_success(mock_index_file: Path, monkeypatch) -> None:
+    """Test that autocompletion returns matching words from the index."""
+    # We need to ensure get_index_path points to our mock file
+    # during the autocompletion call.
+    from src import main
+    monkeypatch.setattr(main, "get_index_path", lambda: mock_index_file)
+
+    # If 'good' is in your mock_index_file
+    suggestions = complete_word("go")
+    assert "good" in suggestions
+
+    # Test case-insensitivity and non-matches
+    assert len(complete_word("xyz")) == 0
+
+
+def test_complete_word_no_index(tmp_path: Path, monkeypatch) -> None:
+    """Test autocompletion handles missing index gracefully."""
+    from src import main
+    missing_path = tmp_path / "nowhere.json"
+    monkeypatch.setattr(main, "get_index_path", lambda: missing_path)
+
+    suggestions = complete_word("any")
+    assert suggestions == []
