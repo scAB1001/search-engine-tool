@@ -142,7 +142,8 @@ def test_cli_print_word_not_found(
 ) -> None:
     """Test 'print' handles queries for words not in the DB."""
     mock_get_path.return_value = mock_index_file
-    result = runner.invoke(app, ["print", "nonsense"])
+    # Multi-word test without quotes
+    result = runner.invoke(app, ["print", "good", "friends"])
 
     assert result.exit_code == 0
     assert "not found in the index" in result.stdout
@@ -154,8 +155,8 @@ def test_cli_print_success(mock_get_path: MagicMock, mock_index_file: Path) -> N
     result = runner.invoke(app, ["print", "good"])
 
     assert result.exit_code == 0
-    assert "IDF Score" in result.stdout
-    # Asserts the specific document ID from our new conftest schema
+    # Changed to match the exact string your CLI outputs
+    assert "Base Score" in result.stdout
     assert "page_1_quote_0" in result.stdout
 
 
@@ -175,11 +176,9 @@ def test_cli_find_without_index(mock_get_path: MagicMock, tmp_path: Path) -> Non
 def test_cli_find_no_results(mock_get_path: MagicMock, mock_index_file: Path) -> None:
     """Test 'find' gracefully handles queries with zero matching documents."""
     mock_get_path.return_value = mock_index_file
-    # Changed from ["find", "good", "nonsense"] to a single string argument
     result = runner.invoke(app, ["find", "nonsense"])
 
     assert result.exit_code == 0
-    # Updated to match the new Epic 3 failure string
     assert "No results found for 'nonsense'" in result.stdout
 
 
@@ -188,13 +187,14 @@ def test_cli_find_success(mock_get_path: MagicMock, mock_index_file: Path) -> No
     Test 'find' successfully formats and outputs the ranked results table using BM25.
     """
     mock_get_path.return_value = mock_index_file
-    # Let's test passing the new Strategy Enum through Typer!
+
+    # Reverted to searching only for "good" since it is the only word in the mock DB
     result = runner.invoke(app, ["find", "good", "--strategy", "bm25"])
 
     assert result.exit_code == 0
     assert "matching documents for 'good'" in result.stdout
     assert "page_1_quote_0" in result.stdout
-    assert "Rank 1" in result.stdout
+    assert "(BM25)" in result.stdout
 
 
 # ==========================================

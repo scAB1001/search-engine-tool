@@ -1,3 +1,4 @@
+import re
 import time
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
@@ -115,7 +116,10 @@ def load() -> None:
 
 
 @app.command("print")
-def print_word(word: str) -> None:
+def print_word(
+    words: Annotated[list[str], typer.Argument(
+        help="The word to print stats for.")]
+) -> None:
     """Prints the inverted index statistics for a particular word."""
     path = get_index_path()
     if not path.exists():
@@ -126,27 +130,38 @@ def print_word(word: str) -> None:
     index = InvertedIndex()
     index.load(str(path))
 
-    word_clean = word.lower().strip()
+    # Join the list of words into a single string (handles no-quote terminal inputs)
+    word_clean = " ".join(words).lower().strip()
+
     if word_clean not in index.index:
         console.print(
-            f"[yellow]Word '{word}' not found in the index.[/yellow]")
+            f"[yellow]Word '{word_clean}' not found in the index.[/yellow]")
         return
 
     data = index.index[word_clean]
-    console.print(f"\n[bold cyan]Word:[/bold cyan] {word_clean}")
-    console.print(f"[bold cyan]IDF Score:[/bold cyan] {data['idf']:.4f}")
-    console.print(
-        f"[bold cyan]Found in {len(data['postings'])} documents.[/bold cyan]\n")
 
-    table = Table("Document ID", "Term Frequency (TF)", "Positions")
+    console.print(f"\n[bold cyan]Word:[/bold cyan] {word_clean}")
+    console.print(
+        f"[bold cyan](TF-IDF/BM25) Base Score:[/bold cyan] {data['idf']:.4f}")
+    console.print(
+        f"[bold cyan]Collection Frequency:[/bold cyan] "
+        f"{data.get('collection_frequency', 0)} occurrences "
+        f"across {len(data['postings'])} documents.\n")
+
+    table = Table("Document ID", "Term Frequency (TF)", "Positions", "Author Context")
     for doc_id, stats in data["postings"].items():
-        table.add_row(doc_id, f"{stats['tf']:.4f}", str(stats["positions"]))
+        # Fetch the author from the document registry, defaulting to "Unknown"
+        author = index.document_registry.get(
+            doc_id, {}).get("author", "Unknown")
+        table.add_row(doc_id, f"{stats['tf']:.4f}",
+                      str(stats["positions"]), author)
+
     console.print(table)
 
 
 @app.command()
 def find(
-    query: Annotated[str, typer.Argument(help="The search query to execute.")],
+    query: Annotated[list[str], typer.Argument(help="The search query to execute.")],
     strategy: Annotated[
         SearchStrategy,
         typer.Option("--strategy", "-s",
@@ -164,35 +179,69 @@ def find(
     index.load(str(path))
     engine = SearchEngine(index)
 
+    # Join the list of words into a single query string
+    query_str = " ".join(query)
+
     with console.status(f"[bold green]Searching via {strategy.value.upper()}..."):
-        results = engine.search(query, strategy=strategy)
+        results = engine.search(query_str, strategy=strategy)
 
     if not results:
-        console.print(f"[yellow]No results found for '{query}'.[/yellow]")
+        console.print(f"[yellow]No results found for '{query_str}'.[/yellow]")
         return
 
     console.print(
-        f"\n[bold green]Found {len(results)} matching documents for '{query}':"
-        f"[/bold green]\n")
+        f"\n[bold green]Found {len(results)} matching documents for "
+        f"'{query_str}':[/bold green]\n")
 
-    # Print the top 5 results as beautiful Rich Panels
+    # Pre-tokenize and stem the query to find what we are looking for
+    query_stems = set(index.tokenize(query_str))
+
     for rank, (doc_id, score) in enumerate(results[:5], 1):
         doc = index.document_registry.get(doc_id, {})
+        raw_text = doc.get('text', 'No text available.')
 
-        # Build the snippet layout
-        content = f"[italic]\"{doc.get('text', 'No text available.')}\"[/italic]\n\n"
-        content += f"[bold cyan]Author:[/bold cyan] {doc.get('author', 'Unknown')}\n"
-        content += f"[bold cyan]URL:[/bold cyan] [blue underline]{doc.get('url', '#')}"
-        content += "[/blue underline]"
+        # Highlight matches in the raw text
+        # We split by non-word characters to preserve punctuation but check stems
+        words = re.split(r'(\W+)', raw_text)
+        highlighted_text = ""
+
+        # Loop over split text: for each word, check its stem against the query stems
+        for part in words:
+            # If it's a word, check its stem
+            if re.match(r'\w+', part):
+                stemmed_part = index.stemmer.stem(part.lower())
+
+                # Apply Rich bold/yellow styling to the matched word
+                if stemmed_part in query_stems:
+                    highlighted_text += f"[bold yellow]{part}[/bold yellow]"
+                else:
+                    highlighted_text += part
+            else:
+                # Punctuation or whitespace, append it
+                highlighted_text += part
+
+        # Safely extract and format tags
+        tags_list = doc.get("tags", [])
+        tags_str = ", ".join(tags_list) if tags_list else "None"
+
+        # Construct the content using the highlighted_text
+        content = f"[italic]{highlighted_text}[/italic]\n\n"
+        content += f"[bold cyan]Author:[/bold cyan]\t{doc.get('author', 'Unknown')}\n"
+        content += f"[bold cyan]Tags:[/bold cyan]\t[ {tags_str} ]\n"
+        content += "[bold cyan]URL:[/bold cyan]\t"
+        content += f"[blue underline]{doc.get('url', '#')}[/blue underline]"
 
         panel = Panel(
             content,
-            title=f"Rank {rank} | Score: {score:.4f} | ID: {doc_id}",
+            title=(
+                f"Rank {rank} | Score: {score:.4f} ({strategy.value.upper()}) | "
+                f"ID: {doc_id}"
+            ),
             title_align="left",
             border_style="green"
         )
         console.print(panel)
-        console.print()  # Add spacing between results
+        console.print()
 
 
 @app.command()
