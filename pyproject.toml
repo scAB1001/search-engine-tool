@@ -104,3 +104,7 @@ exclude_also = [
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+[[tool.mypy.overrides]]
+module = "nltk.*"
+ignore_missing_imports = true
