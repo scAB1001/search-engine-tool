@@ -29,16 +29,16 @@ class InvertedIndex:
         # Temporary storage during the crawl phase before TF-IDF is finalized
         self._raw_documents: dict[str, list[str]] = {}
 
+        # Pre-compile the regex engine to find contiguous alphanumeric blocks
+        self.tokenizer_regex = re.compile(r'[a-z0-9]+')
+
     def _tokenize(self, text: str) -> list[str]:
         """
         Cleans text by removing punctuation and converting to lowercase.
         Case sensitivity requirement: 'Good' == 'good'.
         """
-        text = text.lower()
-        # Remove anything that isn't a letter or number (strips punctuation)
-        text = re.sub(r'[^a-z0-9\s]', '', text)
-        # Split by whitespace and remove empty strings
-        return [word for word in text.split() if word]
+        # Use the pre-compiled regex engine
+        return self.tokenizer_regex.findall(text.lower())
 
     def add_document(self, doc_id: str, text: str) -> None:
         """Processes a raw document and stores its tokens and positions."""

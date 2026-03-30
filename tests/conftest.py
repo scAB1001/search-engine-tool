@@ -56,11 +56,15 @@ def mock_html_response():
 def mock_requests_get(mocker, mock_html_response):
     """
     Intercepts requests.get globally.
-    Returns a mock response object with status 200 and our fake HTML.
+    Returns a mock response object with status 200, our fake HTML,
+    and a valid MIME type to pass V2 Crawler checks.
     """
-    mock_response=MagicMock()
-    mock_response.status_code=200
-    mock_response.text=mock_html_response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.text = mock_html_response
+
+    # Global MIME type validation bypass
+    mock_response.headers = {"Content-Type": "text/html; charset=utf-8"}
 
     # Patch the requests.get function wherever it is imported
     return mocker.patch("requests.get", return_value=mock_response)

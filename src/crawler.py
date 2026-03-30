@@ -2,6 +2,7 @@ import time
 
 import requests
 from bs4 import BeautifulSoup
+from bs4.filter import SoupStrainer
 
 from src.logger import logger
 
@@ -14,7 +15,10 @@ class PoliteCrawler:
 
     def __init__(self, delay_seconds: float = 6.0) -> None:
         self.delay_seconds = delay_seconds
-        self.last_request_time = 0.0
+        self.last_request_time: float = 0.0
+        # Identify our crawler to the server administrators
+        self.headers = {
+            "User-Agent": "QuotesSearchEngineBot/1.0 (Educational Project)"}
 
     def _enforce_politeness(self) -> None:
         """
@@ -33,41 +37,90 @@ class PoliteCrawler:
 
     def fetch_quotes(self, url: str) -> list[dict[str, str]]:
         """
-        Fetches and parses a single page of quotes.
-        Returns a list of dictionaries containing the text and author.
+        Fetches and parses quotes from a given URL, utilising a retry mechanism
+        for transient network failures and strict timeout limits.
         """
         self._enforce_politeness()
+        max_retries = 3
 
-        try:
-            # We use a 10-second timeout to prevent hanging on dead network connections
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()  # Raises HTTPError for bad responses (4xx/5xx)
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Use a 10-second timeout to prevent hanging on dead network connections
+                response = requests.get(url, headers=self.headers, timeout=10.0)
+                response.raise_for_status()  # Raises HTTPError for responses 4xx/5xx
 
-            # Record the exact time the request finished
-            self.last_request_time = time.time()
+                # Record the exact time the request finished
+                self.last_request_time = time.time()
 
-            return self._parse_html(response.text)
+                # Respons   e Headers Verification
+                content_type = response.headers.get("Content-Type", "")
+                if "text/html" not in content_type:
+                    logger.warning(
+                        f"Skipping {url}: Expected text/html, got {content_type}")
+                    return []
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch {url}. Error: {e}")
-            return []  # Fail gracefully
+                return self._parse_html(response.text)
+
+            except requests.exceptions.Timeout as e:
+                # Granular Exception Handling - 10s wait for Timeouts
+                logger.warning(
+                    f"Timeout on attempt {attempt}/{max_retries} "
+                    f"for {url}: {e}. Waiting 10s.")
+                if attempt == max_retries:
+                    logger.error(f"Max retries reached for {url}. Abandoning.")
+                    return []
+                time.sleep(10.0)
+
+            except requests.exceptions.ConnectionError as e:
+                # Granular Exception Handling - 2s wait for Connection Errors
+                logger.warning(
+                    f"Connection error on attempt {attempt}/{max_retries} "
+                    f"for {url}: {e}"
+                )
+                if attempt == max_retries:
+                    logger.error(f"Max retries reached for {url}. Abandoning.")
+                    return []
+                time.sleep(2.0)
+
+            except requests.exceptions.HTTPError as e:
+                # 4xx or 5xx errors. Pointless retrying a 404.
+                logger.error(f"HTTP Error for {url}: {e}")
+                return []
+
+        return []  # pragma: no cover
 
     def _parse_html(self, html_content: str) -> list[dict[str, str]]:
-        """Extracts quote text and authors from the raw HTML using BeautifulSoup."""
-        soup = BeautifulSoup(html_content, "html.parser")
-        extracted_data = []
+        """
+        Parses HTML using lxml, SoupStrainer for memory efficiency,
+        and CSS selectors for precise extraction.
+        """
+        # Strain out navbars, footers, and scripts before RAM ingestion.
+        # Strain for quotes and the 'next' button so our loop can still paginate later.
+        strainer = SoupStrainer(class_=["quote", "next"])
 
-        # Target the specific CSS classes from https://quotes.toscrape.com/
-        quote_blocks = soup.find_all("div", class_="quote")
+        # Bypass the bottleneck by using 'html.parser' instead of the C-based 'lxml'
+        soup = BeautifulSoup(html_content, "lxml", parse_only=strainer)
 
-        for block in quote_blocks:
-            text_span = block.find("span", class_="text")
-            author_small = block.find("small", class_="author")
+        parsed_data = []
 
-            if text_span and author_small:
-                extracted_data.append({
-                    "text": text_span.get_text(strip=True),
-                    "author": author_small.get_text(strip=True)
+        # Use CSS Selectors (.select) instead of .find_all
+        for quote_block in soup.select(".quote"):
+
+            # Extract data with .stripped_strings generator
+            text_node = quote_block.select_one(".text")
+            text = " ".join(text_node.stripped_strings) if text_node else ""
+
+            author_node = quote_block.select_one(".author")
+            author = " ".join(
+                author_node.stripped_strings) if author_node else ""
+
+            if text and author:
+                parsed_data.append({
+                    "text": text,
+                    "author": author
                 })
 
-        return extracted_data
+            # Physically destroy the node to free RAM
+            quote_block.decompose()
+
+        return parsed_data
