@@ -23,7 +23,14 @@ def get_index_path() -> Path:
 
 
 @app.command()
-def build() -> None:
+def build(
+    max_pages: int = typer.Option(
+        0,
+        "--max-pages",
+        "-m",
+        help="Maximum number of pages to crawl (0 for unlimited)."
+    )
+) -> None:
     """Crawls the website, builds the TF-IDF index, and saves it to disk."""
     crawler = PoliteCrawler()
     index = InvertedIndex()
@@ -33,20 +40,27 @@ def build() -> None:
 
     with console.status("[bold green]Crawling quotes.toscrape.com...") as status:
         while current_url:
+            # boundary management check
+            if max_pages > 0 and page_num > max_pages:
+                console.print(
+                    f"[yellow]Max pages limit ({max_pages}) reached. "
+                    f"Stopping crawl.[/yellow]")
+                break
+
             status.update(
                 f"[bold green]Scraping page {page_num}: {current_url}...")
 
             result = crawler.fetch_quotes(current_url)
-            quotes_list = result.get("quotes", [])
+            quotes_List = result.get("quotes", [])
             next_page = result.get("next_page")
 
-            if not quotes_list:
+            if not quotes_List:
                 console.print(
                     f"[yellow]No quotes found on {current_url}. "
                     f"Crawl complete.[/yellow]")
                 break
 
-            for i, quote in enumerate(quotes_list):
+            for i, quote in enumerate(quotes_List):
                 doc_id = f"page_{page_num}_quote_{i}"
                 text = quote.get("text", "")
                 author = quote.get("author", "")

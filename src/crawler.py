@@ -1,3 +1,4 @@
+import random
 import time
 from typing import Any
 
@@ -23,19 +24,25 @@ class PoliteCrawler:
 
     def _enforce_politeness(self) -> None:
         """
-        Calculates and executes the necessary sleep time to respect the crawl delay.
+        Ensures a strict minimum of 6 seconds between requests, plus a randomized
+        jitter to avoid monotonous, detectable crawler patterns.
         """
         if self.last_request_time == 0.0:
-            return  # First request, no need to wait
+            return
 
         elapsed_time = time.time() - self.last_request_time
-        time_to_wait = self.delay_seconds - elapsed_time
+        time_to_wait = 6.0 - elapsed_time
 
         if time_to_wait > 0:
+            # Inject 0.0 to 2.0 seconds of random jitter
+            jitter = random.uniform(0.0, 2.0)
+            total_sleep = time_to_wait + jitter
+
             logger.debug(
-                f"Politeness window active. "
-                f"Sleeping for [yellow]{time_to_wait:.2f}s[/yellow].")
-            time.sleep(time_to_wait)
+                f"Politeness window active. Sleeping for "
+                f"[yellow]{total_sleep:.2f}s[/yellow] (includes {jitter:.2f}s jitter)."
+            )
+            time.sleep(total_sleep)
 
     def fetch_quotes(self, url: str) -> dict[str, Any]:
         """
@@ -179,7 +186,7 @@ class PoliteCrawler:
     def _parse_html(self, html_content: str) -> dict[str, Any]:
         """
         Parses HTML using lxml and CSS selectors.
-        Returns a dictionary containing the extracted quotes and the 'next' page URL.
+        Returns a Dictionary containing the extracted quotes and the 'next' page URL.
         """
         # EDGE CASE DEFENSE: Out-of-Bounds Pagination
         if "No quotes found!" in html_content:

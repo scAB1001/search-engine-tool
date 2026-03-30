@@ -44,33 +44,37 @@ def test_crawler_ignores_malformed_quotes(malformed_html_response: str) -> None:
     assert extracted_quotes[0]["text"] == '"I am a valid quote."'
 
 
+@patch("src.crawler.random.uniform")
 @patch("src.crawler.time.sleep")
 @patch("src.crawler.time.time")
 def test_crawler_enforces_6_second_politeness(
     mock_time: MagicMock,
     mock_sleep: MagicMock,
+    mock_random: MagicMock,
     mock_requests_get: MagicMock
 ) -> None:
-    """Test that the crawler strictly enforces the 6-second delay between requests."""
+    """Test that the crawler strictly enforces the 6-second delay + jitter."""
+    # Force the random jitter to always be exactly 1.0 second for this test
+    mock_random.return_value = 1.0
 
-    # Simulate time passing:
     # t=100.0 (End of Request 1)
     # t=102.0 (Start of Request 2, checking politeness)
-    # t=102.1 (Consumed internally by logger.info generating its timestamp)
+    # t=102.1 (Consumed internally by logger.info)
     # t=106.0 (End of Request 2)
     mock_time.side_effect = [100.0, 102.0, 102.1, 106.0]
 
     crawler = PoliteCrawler()
 
-    # First request: last_request_time is 0.0, so it skips the sleep.
+    # First request: skips sleep.
     crawler.fetch_quotes("http://fake-url.com/page/1")
     assert mock_sleep.call_count == 0
 
-    # Second request: starts at t=102.0.
-    # elapsed_time = 102.0 - 100.0 = 2.0.
-    # 6.0 - 2.0 = 4.0. It MUST sleep for exactly 4.0 seconds.
+    # Second request: 102.0 - 100.0 = 2.0s elapsed.
+    # Base wait: 6.0 - 2.0 = 4.0s.
+    # Jitter: 1.0s.
+    # Total expected sleep: 5.0s.
     crawler.fetch_quotes("http://fake-url.com/page/2")
-    mock_sleep.assert_called_once_with(4.0)
+    mock_sleep.assert_called_once_with(5.0)
 
 
 @patch("src.crawler.time.sleep")
