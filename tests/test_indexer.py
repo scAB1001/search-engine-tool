@@ -53,7 +53,7 @@ def test_search_mutually_exclusive_words(engine: SearchEngine) -> None:
     assert results == []
 
 
-def test_tokenizer_applies_porter_stemmer(empty_index: InvertedIndex) -> None:
+def test_tokenizer_applies_porter_stemmer(blank_index: InvertedIndex) -> None:
     """
     Test that the tokenizer successfully reduces words to their morphological roots.
     """
@@ -61,22 +61,22 @@ def test_tokenizer_applies_porter_stemmer(empty_index: InvertedIndex) -> None:
     # "thinking", "thinks" should stem to "think"
     text = "Running runs run. Thinking thinks."
 
-    # Utilize the centralized empty_index fixture from conftest.py
-    tokens = empty_index.tokenize(text)
+    # Utilize the centralized blank_index fixture from conftest.py
+    tokens = blank_index.tokenize(text)
 
     assert tokens == ["run", "run", "run", "think", "think"]
 
 
-def test_save_and_load_index(empty_index: InvertedIndex, tmp_path: Path) -> None:
+def test_save_and_load_index(blank_index: InvertedIndex, tmp_path: Path) -> None:
     """Test that the index and document registry serialize and deserialize correctly."""
-    empty_index.add_document("doc_1", "Save this to disk.", "Albert", [
+    blank_index.add_document("doc_1", "Save this to disk.", "Albert", [
                              "tech"], "http://url")
-    empty_index.build_index()
+    blank_index.build_index()
 
     filepath = tmp_path / "test_index.json"
 
     # This explicit call covers lines 108-115
-    empty_index.save(str(filepath))
+    blank_index.save(str(filepath))
 
     loaded_index = InvertedIndex()
     loaded_index.load(str(filepath))
@@ -86,11 +86,11 @@ def test_save_and_load_index(empty_index: InvertedIndex, tmp_path: Path) -> None
     assert loaded_index.document_registry["doc_1"]["author"] == "Albert"
 
 
-def test_load_missing_index_file(empty_index: InvertedIndex) -> None:
+def test_load_missing_index_file(blank_index: InvertedIndex) -> None:
     """Test that loading a non-existent index file triggers the exception handler."""
     # This explicit pytest.raises covers lines 129-133
     with pytest.raises(FileNotFoundError):
-        empty_index.load("path/to/absolute/nowhere.json")
+        blank_index.load("path/to/absolute/nowhere.json")
 
 
 def test_search_uses_bm25_strategy(engine: SearchEngine) -> None:

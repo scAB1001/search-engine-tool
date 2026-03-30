@@ -139,9 +139,35 @@ def populated_index() -> InvertedIndex:
 
 
 @pytest.fixture
-def empty_index() -> InvertedIndex:
+def blank_index() -> InvertedIndex:
     """Provides a fresh, empty InvertedIndex instance."""
     return InvertedIndex()
+
+
+@pytest.fixture
+def empty_index_file(tmp_path: Path) -> Path:
+    """Provides a valid index file with zero documents for sitemap testing."""
+    empty_index = tmp_path / "empty.json"
+    empty_index.write_text(
+        '{"metadata": {"total_documents": 0}, "document_registry": {}, "index": {}}'
+    )
+    return empty_index
+
+
+@pytest.fixture
+def multi_url_index_file(tmp_path: Path) -> Path:
+    """Provides an index with varying URL depths to test sitemap prioritization."""
+    multi_url_index = tmp_path / "multi.json"
+    multi_url_index.write_text(json.dumps({
+        "metadata": {"total_documents": 3},
+        "document_registry": {
+            "doc1": {"url": "https://test.com/"},           # Priority 1.0
+            "doc2": {"url": "https://test.com/page/2/"},    # Priority 0.8
+            "doc3": {"url": "https://test.com/about"}       # Priority 0.5
+        },
+        "index": {}
+    }))
+    return multi_url_index
 
 
 @pytest.fixture

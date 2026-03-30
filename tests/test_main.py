@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -195,6 +196,134 @@ def test_cli_find_success(mock_get_path: MagicMock, mock_index_file: Path) -> No
     assert "page_1_quote_0" in result.stdout
     assert "Rank 1" in result.stdout
 
+
+# ==========================================
+# TEST COMMAND: SITEMAP
+# ==========================================
+
+def test_cli_sitemap_without_index(mock_get_path: MagicMock, tmp_path: Path) -> None:
+    """Test 'sitemap' aborts if index is missing."""
+    mock_get_path.return_value = tmp_path / "missing.json"
+    result = runner.invoke(app, ["sitemap"])
+    assert result.exit_code == 1
+
+
+@patch("src.main.requests.head")
+def test_cli_sitemap_success_with_header(
+    mock_head: MagicMock,
+    mock_get_path: MagicMock,
+    mock_index_file: Path,
+    tmp_path: Path
+) -> None:
+    """Test 'sitemap' correctly parses an active Last-Modified HTTP header."""
+    mock_get_path.return_value = mock_index_file
+
+    # Mock a successful HEAD request with a valid HTTP-Date
+    mock_response = MagicMock()
+    mock_response.headers = {"Last-Modified": "Wed, 21 Oct 2015 07:28:00 GMT"}
+    mock_head.return_value = mock_response
+
+    output_file = tmp_path / "sitemap.xml"
+    result = runner.invoke(app, ["sitemap", "--output", str(output_file)])
+
+    assert result.exit_code == 0
+    assert "Professional Sitemap generated" in result.stdout
+    assert output_file.exists()
+
+    xml_content = output_file.read_text()
+    assert "<loc>http://test</loc>" in xml_content
+    # Verifies the email.utils parsedate logic correctly converted it to ISO 8601
+    assert "<lastmod>2015-10-21</lastmod>" in xml_content
+    assert "<priority>1.0</priority>" in xml_content
+
+
+@patch("src.main.requests.head")
+def test_cli_sitemap_fallback_on_network_error(
+    mock_head: MagicMock,
+    mock_get_path: MagicMock,
+    mock_index_file: Path,
+    tmp_path: Path
+) -> None:
+    """Test 'sitemap' falls back to the current date if the network fails."""
+    mock_get_path.return_value = mock_index_file
+
+    import requests
+    mock_head.side_effect = requests.RequestException("Network Error")
+
+    output_file = tmp_path / "sitemap.xml"
+    result = runner.invoke(app, ["sitemap", "--output", str(output_file)])
+
+    assert result.exit_code == 0
+
+    xml_content = output_file.read_text()
+    # It shouldn't crash; it should just write the file with today's date
+    assert "<loc>http://test</loc>" in xml_content
+    assert "<lastmod>" in xml_content
+
+
+def test_cli_sitemap_no_urls(mock_get_path: MagicMock, empty_index_file: Path) -> None:
+    """Test 'sitemap' exits gracefully if the registry is empty."""
+    # Uses the new conftest fixture!
+    mock_get_path.return_value = empty_index_file
+
+    result = runner.invoke(app, ["sitemap"])
+    assert result.exit_code == 0
+    assert "No URLs found" in result.stdout
+
+
+@patch("src.main.requests.head")
+def test_cli_sitemap_depths_and_missing_header(
+    mock_head: MagicMock,
+    mock_get_path: MagicMock,
+    multi_url_index_file: Path,
+    tmp_path: Path
+) -> None:
+    """Test URL depth prioritization and header fallback logic."""
+    # Uses the new conftest fixture!
+    mock_get_path.return_value = multi_url_index_file
+
+    mock_response = MagicMock()
+    mock_response.headers = {}
+    mock_head.return_value = mock_response
+
+    output_file = tmp_path / "sitemap.xml"
+    result = runner.invoke(app, ["sitemap", "--output", str(output_file)])
+
+    assert result.exit_code == 0
+
+    xml_content = output_file.read_text()
+    assert "<priority>1.0</priority>" in xml_content
+    assert "<priority>0.8</priority>" in xml_content
+    assert "<priority>0.5</priority>" in xml_content
+
+
+@patch("src.main.requests.head")
+def test_cli_sitemap_relative_path(
+    mock_head: MagicMock,
+    mock_get_path: MagicMock,
+    mock_index_file: Path,
+    monkeypatch,
+    tmp_path: Path
+) -> None:
+    """Test 'sitemap' correctly routes relative output paths into a data/ directory."""
+    mock_get_path.return_value = mock_index_file
+
+    mock_response = MagicMock()
+    mock_response.headers = {}
+    mock_head.return_value = mock_response
+
+    # Prevents the test from creating a real 'data' folder in your actual project root!
+    monkeypatch.chdir(tmp_path)
+
+    # Pass a RELATIVE string path rather than an absolute Path object
+    result = runner.invoke(app, ["sitemap", "--output", "custom_sitemap.xml"])
+
+    assert result.exit_code == 0
+
+    # Verify the code correctly prepended 'data/' and created the folder
+    expected_path = tmp_path / "data" / "custom_sitemap.xml"
+    assert expected_path.exists()
+    assert "<loc>http://test</loc>" in expected_path.read_text()
 
 # ==========================================
 # TEST PATH RESOLUTION
