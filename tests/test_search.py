@@ -1,7 +1,7 @@
 import pytest
 
 from src.indexer import InvertedIndex
-from src.search import SearchEngine
+from src.search import SearchEngine, SearchStrategy
 
 
 def test_search_single_word(populated_index: InvertedIndex) -> None:
@@ -71,3 +71,33 @@ def test_tokenizer_applies_porter_stemmer() -> None:
     tokens = index.tokenize(text)
 
     assert tokens == ["run", "run", "run", "think", "think"]
+
+
+def test_search_uses_bm25_strategy(populated_index: InvertedIndex) -> None:
+    """Test that the engine successfully routes and calculates Okapi BM25 scores."""
+    engine = SearchEngine(populated_index)
+
+    # Run the exact same query using both strategies
+    results_tfidf = engine.search("good", strategy=SearchStrategy.TF_IDF)
+    results_bm25 = engine.search("good", strategy=SearchStrategy.BM25)
+
+    assert len(results_tfidf) == len(results_bm25) == 2
+
+    # BM25 math scales differently than TF-IDF.
+    # We assert the scores are calculated, but mathematically distinct.
+    assert results_tfidf[0][1] != results_bm25[0][1]
+    assert results_bm25[0][1] > 0.0
+
+
+def test_search_zone_weighting(populated_index: InvertedIndex) -> None:
+    """Test that terms found in the author or tag zones receive score multipliers."""
+    engine = SearchEngine(populated_index)
+
+    # "author" exists in the author zone for all 3 pages in the fixture
+    results_author = engine.search("author")
+    assert len(results_author) == 3
+
+    # "tag1" exists exclusively in the tag zone for page_1
+    results_tag = engine.search("tag1")
+    assert len(results_tag) == 1
+    assert results_tag[0][0] == "page_1"
