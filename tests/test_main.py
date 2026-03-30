@@ -340,3 +340,29 @@ def test_get_index_path(mock_get_app_dir: MagicMock, tmp_path: Path) -> None:
     assert path.parent.exists()
     assert path.name == "index.json"
     assert str(tmp_path) in str(path)
+
+
+# ==========================================
+# TEST CLI HELP AND WELCOME PANEL
+# ==========================================
+
+def test_cli_base_command_shows_welcome_panel() -> None:
+    """Test that calling the app without a subcommand triggers the welcome panel."""
+    # Invoke the app with no arguments
+    result = runner.invoke(app, [])
+
+    assert result.exit_code == 0
+    # Check for the specific version/title string in the Rich Panel
+    assert "Search Engine CLI" in result.stdout
+    assert "Run --help to see available commands" in result.stdout
+
+
+def test_cli_help_shows_rich_docstring() -> None:
+    """Test that the global help shows our custom docstring with Rich markup."""
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    # Check that our specific callback docstring is rendered
+    assert "Built with ❤️  by Andreas for COMP3011" in result.stdout
+    assert "Okapi BM25" in result.stdout
+    assert "Database Operations" in result.stdout  # Verifies Help Panels exist
