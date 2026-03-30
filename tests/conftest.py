@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -118,3 +120,23 @@ def mock_requests_get(mocker, mock_html_response):
 
     # Patch the requests.get function wherever it is imported
     return mocker.patch("requests.get", return_value=mock_response)
+
+
+@pytest.fixture
+def mock_index_file(tmp_path: Path) -> Path:
+    """Creates a temporary, valid index.json file for CLI happy paths."""
+    file_path = tmp_path / "index.json"
+    dummy_data = {
+        "metadata": {"total_documents": 1},
+        "index": {
+            "good": {
+                "idf": 0.5,
+                "postings": {
+                    "page_1": {"tf": 0.5, "positions": [0, 3]}
+                }
+            }
+        }
+    }
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(dummy_data, f)
+    return file_path
