@@ -3,6 +3,8 @@ import math
 import re
 from typing import Any
 
+from nltk.stem import PorterStemmer
+
 from src.logger import logger
 
 # TODO: IMplement network error handling
@@ -31,18 +33,20 @@ class InvertedIndex:
 
         # Pre-compile the regex engine to find contiguous alphanumeric blocks
         self.tokenizer_regex = re.compile(r'[a-z0-9]+')
+        # Initialise the Porter Stemmer for morphological normalisation
+        self.stemmer = PorterStemmer()
 
-    def _tokenize(self, text: str) -> list[str]:
+    def tokenize(self, text: str) -> list[str]:
         """
-        Cleans text by removing punctuation and converting to lowercase.
-        Case sensitivity requirement: 'Good' == 'good'.
+        Cleans text, extracts tokens, and applies stemming in a single optimized pass.
         """
-        # Use the pre-compiled regex engine
-        return self.tokenizer_regex.findall(text.lower())
+        raw_tokens = self.tokenizer_regex.findall(text.lower())
+        return [self.stemmer.stem(token) for token in raw_tokens]
 
     def add_document(self, doc_id: str, text: str) -> None:
         """Processes a raw document and stores its tokens and positions."""
-        tokens = self._tokenize(text)
+        # Use the newly public tokenize method
+        tokens = self.tokenize(text)
         self._raw_documents[doc_id] = tokens
         self.total_documents += 1
 

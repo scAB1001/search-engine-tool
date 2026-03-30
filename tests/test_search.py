@@ -70,3 +70,28 @@ def test_search_mutually_exclusive_words(populated_index: InvertedIndex) -> None
     results = engine.search("good games")
 
     assert results == []
+
+
+def test_tokenizer_applies_porter_stemmer() -> None:
+    """
+    Test that the tokenizer successfully reduces words to their morphological roots.
+    """
+    index = InvertedIndex()
+
+    # "running", "runs", and "run" should all stem to "run"
+    # "thinking", "thinks" should stem to "think"
+    text = "Running runs run. Thinking thinks."
+
+    tokens = index.tokenize(text)
+
+    assert tokens == ["run", "run", "run", "think", "think"]
+
+
+def test_add_document_stores_stemmed_tokens() -> None:
+    """Test that documents are added using their stemmed vocabulary."""
+    index = InvertedIndex()
+    index.add_document("doc_1", "The engineer is engineering.")
+
+    # "engineer" and "engineering" both stem to "engin"
+    assert "engin" in index.index
+    assert len(index.index["engin"]["postings"]["doc_1"]["positions"]) == 2

@@ -21,7 +21,7 @@ class SearchEngine:
             sorted descending by score.
         """
         # 1. Normalize the query
-        tokens = self.index_db._tokenize(query)
+        tokens = self.index_db.tokenize(query)
         if not tokens:
             return []
 

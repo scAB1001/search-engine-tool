@@ -6,7 +6,7 @@ from src.indexer import InvertedIndex
 def test_text_normalization() -> None:
     """Test that punctuation is removed and text is lowercased."""
     index = InvertedIndex()
-    tokens = index._tokenize("Hello, World! It's a 'good' day.")
+    tokens = index.tokenize("Hello, World! It's a 'good' day.")
 
     # Notice that "It's" is now mathematically split into "it" and "s"
     assert tokens == ["hello", "world", "it", "s", "a", "good", "day"]
@@ -23,13 +23,14 @@ def test_tf_idf_calculation() -> None:
 
     index.build_index()
 
-    # 'thinking' is in 1 out of 2 docs. IDF = ln(2/1) = 0.693...
-    assert "thinking" in index.index
-    assert index.index["thinking"]["idf"] > 0.0
+    # 'thinking' is stemmed to 'think'.
+    # It is in 1 out of 2 docs. IDF = ln(2/1) = 0.693...
+    assert "think" in index.index
+    assert index.index["think"]["idf"] > 0.0
 
-    # TF for 'thinking' in doc_1: 2 occurrences / 4 total words = 0.5
-    assert index.index["thinking"]["postings"]["doc_1"]["tf"] == 0.5
-    assert index.index["thinking"]["postings"]["doc_1"]["positions"] == [1, 3]
+    # TF for 'think' in doc_1: 2 occurrences / 4 total words = 0.5
+    assert index.index["think"]["postings"]["doc_1"]["tf"] == 0.5
+    assert index.index["think"]["postings"]["doc_1"]["positions"] == [1, 3]
 
     # 'our' is in both docs. IDF = ln(2/2) = 0.0
     assert index.index["our"]["idf"] == 0.0
