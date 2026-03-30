@@ -1,5 +1,6 @@
+import logging
 
-from src.logger import setup_logging
+from src.logger import set_verbose_mode, setup_logging
 
 
 def test_logger_prevents_duplicate_handlers() -> None:
@@ -18,3 +19,14 @@ def test_logger_prevents_duplicate_handlers() -> None:
 
     # The count must remain exactly the same to prevent terminal spam
     assert len(logger.handlers) == initial_handler_count
+
+
+def test_set_verbose_mode() -> None:
+    """Test that the verbose toggle sets the logger level to DEBUG."""
+    logger = logging.getLogger("search_engine")
+
+    # Trigger the function
+    set_verbose_mode()
+
+    # Assert the logging level changed
+    assert logger.level == logging.DEBUG

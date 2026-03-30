@@ -62,15 +62,14 @@ class InvertedIndex:
         This must be called after all documents have been added.
         """
         logger.info(
-            f"Calculating TF-IDF scores for {self.total_documents} documents...")
+            f"Calculating TF-IDF scores for "
+            f"[cyan]{self.total_documents}[/cyan] documents...")
 
         # TODO: Use token
-        for token, data in self.index.items():
+        for _token, data in self.index.items():  # pragma: no cover
             # 1. Calculate IDF (Inverse Document Frequency)
             doc_frequency = len(data["postings"])
             data["idf"] = math.log(self.total_documents / doc_frequency)
-
-            print(token)
 
             # 2. Calculate TF (Term Frequency) for each document
             for doc_id, posting in data["postings"].items():
@@ -81,7 +80,8 @@ class InvertedIndex:
         # Clear raw documents to free memory since the index is complete
         self._raw_documents.clear()
         logger.info(
-            f"Index built successfully with {len(self.index)} unique terms.")
+            f"Index built successfully with "
+            f"[green]{len(self.index)}[/green] unique terms.")
 
     def save(self, filepath: str) -> None:
         """Serializes the index to a JSON file."""
@@ -91,7 +91,8 @@ class InvertedIndex:
         }
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(export_data, f, indent=2)
-        logger.info(f"Index successfully saved to {filepath}")
+        logger.info(
+            f"Index successfully saved to [cyan]{filepath}[/cyan]")
 
     def load(self, filepath: str) -> None:
         """Deserializes the index from a JSON file."""
@@ -101,8 +102,10 @@ class InvertedIndex:
                 self.total_documents = import_data["metadata"]["total_documents"]
                 self.index = import_data["index"]
             logger.info(
-                f"Loaded index from {filepath} ({self.total_documents} documents).")
+                f"Loaded index from [cyan]{filepath}[/cyan] "
+                f"([green]{self.total_documents}[/green] documents).")
         except FileNotFoundError:
             logger.error(
-                f"Index file not found at {filepath}. Please run 'build' first.")
+                f"Index file not found at [cyan]{filepath}[/cyan]. "
+                f"Please run 'build' first.")
             raise

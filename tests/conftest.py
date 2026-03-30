@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -53,6 +55,56 @@ def mock_html_response():
 
 
 @pytest.fixture
+def malformed_html_response():
+    """Provides HTML with missing tags/authors to test parser resilience."""
+    return """
+    <html>
+        <body>
+            <div class="quote">
+                <span class="text">"I have no author."</span>
+            </div>
+            <div class="quote">
+                <small class="author">Ghost Writer</small>
+            </div>
+            <div class="quote">
+            </div>
+            <div class="quote">
+                <span class="text">"I am a valid quote."</span>
+                <small class="author">Valid Author</small>
+            </div>
+        </body>
+    </html>
+    """
+
+
+@pytest.fixture
+def relational_html_response():
+    """Provides HTML with author URLs and tags to test relational parsing."""
+    return """
+    <div class="quote">
+        <span class="text">"Test Quote"</span>
+        <span>by <small class="author">Albert Einstein</small>
+        <a href="/author/Albert-Einstein">(about)</a></span>
+        <div class="tags">
+            <a class="tag" href="/tag/science/page/1/">science</a>
+        </div>
+    </div>
+    """
+
+
+@pytest.fixture
+def author_html_response():
+    """Provides HTML representing a successful author metadata page."""
+    return """
+    <div class="author-details">
+        <h3 class="author-title">Albert Einstein</h3>
+        <span class="author-born-date">March 14, 1879</span>
+        <span class="author-born-location">in Ulm, Germany</span>
+        <div class="author-description">A theoretical physicist.</div>
+    </div>
+    """
+
+@pytest.fixture
 def mock_requests_get(mocker, mock_html_response):
     """
     Intercepts requests.get globally.
@@ -68,3 +120,23 @@ def mock_requests_get(mocker, mock_html_response):
 
     # Patch the requests.get function wherever it is imported
     return mocker.patch("requests.get", return_value=mock_response)
+
+
+@pytest.fixture
+def mock_index_file(tmp_path: Path) -> Path:
+    """Creates a temporary, valid index.json file for CLI happy paths."""
+    file_path = tmp_path / "index.json"
+    dummy_data = {
+        "metadata": {"total_documents": 1},
+        "index": {
+            "good": {
+                "idf": 0.5,
+                "postings": {
+                    "page_1": {"tf": 0.5, "positions": [0, 3]}
+                }
+            }
+        }
+    }
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(dummy_data, f)
+    return file_path

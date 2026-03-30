@@ -8,82 +8,97 @@ from src.crawler import PoliteCrawler
 from src.indexer import InvertedIndex
 from src.search import SearchEngine
 
-# Initialize the Typer CLI app and the Rich console for beautiful formatting
 app = typer.Typer(help="Search Engine Tool for quotes.toscrape.com")
 console = Console()
 
-INDEX_FILE = Path("data/index.json")
+APP_NAME = "search-engine-tool"
+
+
+def get_index_path() -> Path:
+    """Returns the secure, OS-specific path to the index file."""
+    app_dir = typer.get_app_dir(APP_NAME)
+    path = Path(app_dir) / "index.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 @app.command()
 def build() -> None:
     """Crawls the website, builds the TF-IDF index, and saves it to disk."""
-    crawler = PoliteCrawler(delay_seconds=6.0)
+    crawler = PoliteCrawler()
     index = InvertedIndex()
 
-    base_url = "https://quotes.toscrape.com/page/{}/"
-    page = 1
+    current_url = "https://quotes.toscrape.com/"
+    page_num = 1
 
-    console.print(
-        "[bold green]Starting politeness-aware crawl...[/bold green]")
+    with console.status("[bold green]Crawling quotes.toscrape.com...") as status:
+        while current_url:
+            status.update(
+                f"[bold green]Scraping page {page_num}: {current_url}...")
 
-    # Ensure the data directory exists
-    INDEX_FILE.parent.mkdir(exist_ok=True)
+            result = crawler.fetch_quotes(current_url)
+            quotes_list = result.get("quotes", [])
+            next_page = result.get("next_page")
 
-    # Loop through the pagination until we hit a page with no quotes
-    while True:
-        url = base_url.format(page)
-        console.print(f"Scraping {url}...")
-        quotes = crawler.fetch_quotes(url)
+            if not quotes_list:
+                console.print(
+                    f"[yellow]No quotes found on {current_url}. "
+                    f"Crawl complete.[/yellow]")
+                break
 
-        if not quotes:
-            console.print(
-                f"[yellow]No more quotes found on page {page}. \
-                    Crawl complete.[/yellow]")
-            break
+            for i, quote in enumerate(quotes_list):
+                doc_id = f"page_{page_num}_quote_{i}"
+                text = quote.get("text", "")
+                author = quote.get("author", "")
+                tags = " ".join(quote.get("tags", []))
 
-        for i, quote in enumerate(quotes):
-            # Create a unique document ID for each quote
-            doc_id = f"page_{page}_quote_{i}"
-            # Combine text and author to make both searchable
-            text = f"{quote['text']} {quote['author']}"
-            index.add_document(doc_id, text)
+                combined_text = f"{text} {author} {tags}"
+                index.add_document(doc_id, combined_text)
 
-        page += 1
+            if next_page:
+                current_url = f"https://quotes.toscrape.com{next_page}"
+                page_num += 1
+            else:
+                current_url = ""
 
-    console.print("[bold blue]Building TF-IDF Index...[/bold blue]")
+    console.print("[green]Crawl complete. Building TF-IDF index...[/green]")
     index.build_index()
-    index.save(str(INDEX_FILE))
+
+    # Save using the dynamic path!
+    save_path = get_index_path()
+    index.save(str(save_path))
     console.print(
-        f"[bold green]Successfully saved index to {INDEX_FILE}[/bold green]")
+        f"[bold green]Success![/bold green] Index saved to {save_path}")
 
 
 @app.command()
 def load() -> None:
     """Loads the index from the file system to verify integrity."""
-    if not INDEX_FILE.exists():
+    path = get_index_path()
+    if not path.exists():
         console.print(
             "[bold red]Error: Index file not found. Run 'build' first.[/bold red]")
         raise typer.Exit(code=1)
 
     index = InvertedIndex()
-    index.load(str(INDEX_FILE))
+    index.load(str(path))
     console.print(
-        f"[bold green]Successfully loaded index "
-        f"with {index.total_documents} documents in memory.[/bold green]"
+        f"[bold green]Successfully loaded index with "
+        f"{index.total_documents} documents in memory.[/bold green]"
     )
 
 
 @app.command("print")
 def print_word(word: str) -> None:
     """Prints the inverted index statistics for a particular word."""
-    if not INDEX_FILE.exists():
+    path = get_index_path()
+    if not path.exists():
         console.print(
             "[bold red]Error: Index file not found. Run 'build' first.[/bold red]")
         raise typer.Exit(code=1)
 
     index = InvertedIndex()
-    index.load(str(INDEX_FILE))
+    index.load(str(path))
 
     word_clean = word.lower().strip()
     if word_clean not in index.index:
@@ -106,29 +121,29 @@ def print_word(word: str) -> None:
 @app.command()
 def find(query: list[str]) -> None:
     """Finds a given query phrase in the index and returns ranked pages."""
-    if not INDEX_FILE.exists():
+    path = get_index_path()
+    if not path.exists():
         console.print(
             "[bold red]Error: Index file not found. Run 'build' first.[/bold red]")
         raise typer.Exit(code=1)
 
     index = InvertedIndex()
-    index.load(str(INDEX_FILE))
+    index.load(str(path))
     engine = SearchEngine(index)
 
-    # Typer captures multi-word arguments as a list, so we join them back into a string
     full_query = " ".join(query)
     results = engine.search(full_query)
 
     if not results:
         console.print(
-            f"[yellow]No documents found containing "
-            f"all words in: '{full_query}'[/yellow]"
+            f"[yellow]No documents found containing all words in: "
+            f"'{full_query}'[/yellow]"
         )
         return
 
     console.print(
-        f"\n[bold green]Found {len(results)} matching documents "
-        f"for '{full_query}':[/bold green]"
+        f"\n[bold green]Found {len(results)} matching documents for "
+        f"'{full_query}':[/bold green]"
     )
     table = Table("Rank", "Document ID", "TF-IDF Score")
     for i, (doc_id, score) in enumerate(results, 1):

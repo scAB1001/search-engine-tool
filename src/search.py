@@ -29,7 +29,8 @@ class SearchEngine:
         # the Boolean AND intersection is mathematically guaranteed to be empty.
         for token in tokens:
             if token not in self.index_db.index:
-                logger.info(f"Token '{token}' not found in index. No results.")
+                logger.debug(
+                    f"Token '[yellow]{token}[/yellow]' not found in index.")
                 return []
 
         # 3. Boolean AND Intersection
@@ -43,8 +44,8 @@ class SearchEngine:
             )
 
         if not matching_docs:
-            logger.info(
-                "Terms exist individually, but never on the same page.")
+            logger.debug(
+                "Terms exist individually, but no intersecting pages found.")
             return []
 
         # 4. Dynamic TF-IDF Scoring
@@ -63,6 +64,6 @@ class SearchEngine:
         # 5. Sort descending so the most relevant documents appear first
         sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
 
-        logger.info(
-            f"Found {len(sorted_results)} matching pages for query: '{query}'")
+        logger.info(f"Found [green]{len(sorted_results)}[/green] "
+                    f"matching pages for query: '[cyan]{query}[/cyan]'")
         return sorted_results

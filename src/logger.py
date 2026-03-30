@@ -1,49 +1,44 @@
 """
 Application Logging Configuration.
 
-This module provides a centralized, structured logging setup for the Search Engine CLI.
-It ensures that all application logs (crawling progress, indexing status, and search
-queries) are formatted consistently and streamed to standard output for immediate
-terminal feedback.
+Provides a centralized, rich-formatted logging setup for the Search Engine CLI.
 """
 
 import logging
-import sys
+
+from rich.logging import RichHandler
 
 
 def setup_logging() -> logging.Logger:
     """
-    Configures industry-standard structured logging for the application.
-
-    Initializes a singleton-like logger instance. It explicitly checks for
-    existing handlers to prevent log duplication, which commonly occurs during
-    multiple module imports or when running the Pytest test suite.
-
-    Returns:
-        logging.Logger: The configured application logger instance.
+    Configures industry-standard rich logging for the application.
     """
-    # Renamed from green_fintech to reflect the current domain
     logger = logging.getLogger("search_engine")
 
-    # Only attach a new handler if none exist to prevent duplicate terminal lines
     if not logger.handlers:
-        # INFO is the default level; DEBUG can be toggled later via Typer CLI flags
+        # Default to INFO to keep the standard terminal output clean
         logger.setLevel(logging.INFO)
 
-        # Streamlined format specifically for clean CLI consumption
-        # Removed the %(name)s parameter to keep the terminal output uncluttered
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
+        # RichHandler automatically aligns levels, colorizes output, and formats time
+        rich_handler = RichHandler(
+            rich_tracebacks=True,
+            markup=True,  # Allows us to use [green] tags in our log strings!
+            show_path=False,  # Hides the file path to keep CLI output uncluttered
+            log_time_format="%H:%M:%S"
         )
 
-        # Stream logs to stdout so they appear naturally in the shell
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(formatter)
-        logger.addHandler(console_handler)
+        # We don't need a complex string formatter because Rich handles the layout
+        formatter = logging.Formatter("%(message)s")
+        rich_handler.setFormatter(formatter)
+        logger.addHandler(rich_handler)
 
     return logger
 
 
-# Instantiate a global logger instance to be imported across the application
+def set_verbose_mode() -> None:
+    """Dynamically switches the logger to DEBUG level for deep diagnostics."""
+    logger = logging.getLogger("search_engine")
+    logger.setLevel(logging.DEBUG)
+
+
 logger = setup_logging()
