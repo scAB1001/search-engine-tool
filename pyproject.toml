@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = [
     { name = "Andreas Bazigos", email = "sc222ab@leeds.ac.uk" },
 ]
-description = "A CLI search engine tool to crawl, index, and query https://quotes.toscrape.com."
+description = "A CLI search engine tool to crawl, index, and query quotes.toscrape.com."
 readme = "README.md"
 requires-python = ">=3.12.12"
 

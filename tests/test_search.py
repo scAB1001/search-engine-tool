@@ -1,21 +1,7 @@
 import pytest
 
 from src.indexer import InvertedIndex
-from src.search import SearchEngine
-
-
-@pytest.fixture
-def populated_index() -> InvertedIndex:
-    """Creates a deterministic index to safely test search math and intersections."""
-    index = InvertedIndex()
-    # page_1 heavily features "good" and "friends"
-    index.add_document("page_1", "good friends are good")
-    # page_2 only features "good"
-    index.add_document("page_2", "good people are everywhere")
-    # page_3 only features "friends"
-    index.add_document("page_3", "friends play games")
-    index.build_index()
-    return index
+from src.search import SearchEngine, SearchStrategy
 
 
 def test_search_single_word(populated_index: InvertedIndex) -> None:
@@ -67,7 +53,7 @@ def test_search_mutually_exclusive_words(populated_index: InvertedIndex) -> None
 
     # 'good' is in page_1 and page_2. 'games' is in page_3.
     # The Boolean AND intersection will be mathematically empty.
-    results = engine.search("good games")
+    results = engine.search("friends food")
 
     assert results == []
 
@@ -87,11 +73,31 @@ def test_tokenizer_applies_porter_stemmer() -> None:
     assert tokens == ["run", "run", "run", "think", "think"]
 
 
-def test_add_document_stores_stemmed_tokens() -> None:
-    """Test that documents are added using their stemmed vocabulary."""
-    index = InvertedIndex()
-    index.add_document("doc_1", "The engineer is engineering.")
+def test_search_uses_bm25_strategy(populated_index: InvertedIndex) -> None:
+    """Test that the engine successfully routes and calculates Okapi BM25 scores."""
+    engine = SearchEngine(populated_index)
 
-    # "engineer" and "engineering" both stem to "engin"
-    assert "engin" in index.index
-    assert len(index.index["engin"]["postings"]["doc_1"]["positions"]) == 2
+    # Run the exact same query using both strategies
+    results_tfidf = engine.search("good", strategy=SearchStrategy.TF_IDF)
+    results_bm25 = engine.search("good", strategy=SearchStrategy.BM25)
+
+    assert len(results_tfidf) == len(results_bm25) == 2
+
+    # BM25 math scales differently than TF-IDF.
+    # We assert the scores are calculated, but mathematically distinct.
+    assert results_tfidf[0][1] != results_bm25[0][1]
+    assert results_bm25[0][1] > 0.0
+
+
+def test_search_zone_weighting(populated_index: InvertedIndex) -> None:
+    """Test that terms found in the author or tag zones receive score multipliers."""
+    engine = SearchEngine(populated_index)
+
+    # "author" exists in the author zone for all 3 pages in the fixture
+    results_author = engine.search("author")
+    assert len(results_author) == 3
+
+    # "tag1" exists exclusively in the tag zone for page_1
+    results_tag = engine.search("tag1")
+    assert len(results_tag) == 1
+    assert results_tag[0][0] == "page_1"

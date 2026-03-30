@@ -7,103 +7,121 @@ from nltk.stem import PorterStemmer
 
 from src.logger import logger
 
-# TODO: IMplement network error handling
 
 class InvertedIndex:
     """
-    An advanced Inverted Index implementing TF-IDF scoring for optimal search relevance.
+    An advanced Inverted Index implementing TF-IDF scoring, Document Registry and Zones.
     """
 
     def __init__(self) -> None:
-        # Schema: {
-        #   word: {
-        #       "idf": float, "postings": {
-        #           doc_id: {
-        #               "tf": float,
-        #               "positions": [int]
-        #           }
-        #       }
-        #   }
-        # }
         self.index: dict[str, dict[str, Any]] = {}
         self.total_documents: int = 0
-
-        # Temporary storage during the crawl phase before TF-IDF is finalized
         self._raw_documents: dict[str, list[str]] = {}
 
-        # Pre-compile the regex engine to find contiguous alphanumeric blocks
+        # NEW: Stores raw metadata for rich CLI snippets and Okapi BM25 lengths
+        self.document_registry: dict[str, dict[str, Any]] = {}
+
         self.tokenizer_regex = re.compile(r'[a-z0-9]+')
-        # Initialise the Porter Stemmer for morphological normalisation
         self.stemmer = PorterStemmer()
 
     def tokenize(self, text: str) -> list[str]:
-        """
-        Cleans text, extracts tokens, and applies stemming in a single optimized pass.
-        """
+        """Cleans text, extracts tokens, and applies Porter Stemming."""
         raw_tokens = self.tokenizer_regex.findall(text.lower())
         return [self.stemmer.stem(token) for token in raw_tokens]
 
-    def add_document(self, doc_id: str, text: str) -> None:
-        """Processes a raw document and stores its tokens and positions."""
-        # Use the newly public tokenize method
-        tokens = self.tokenize(text)
-        self._raw_documents[doc_id] = tokens
+    def add_document(self,
+                     doc_id: str,
+                     text: str,
+                     author: str,
+                     tags: list[str],
+                     url: str
+    ) -> None:
+        """Processes a structured document to store zones and metadata."""
+        # 1. Tokenize zones separately to track Extents
+        zones = {
+            "text": self.tokenize(text),
+            "author": self.tokenize(author),
+            "tag": self.tokenize(" ".join(tags))
+        }
+
+        # 2. Combine for total document length
+        all_tokens = zones["text"] + zones["author"] + zones["tag"]
+        doc_length = len(all_tokens)
+
+        # 3. Store in Document Registry
+        self.document_registry[doc_id] = {
+            "text": text,
+            "author": author,
+            "url": url,
+            "length": doc_length
+        }
+
+        self._raw_documents[doc_id] = all_tokens
         self.total_documents += 1
 
-        for position, token in enumerate(tokens):
-            if token not in self.index:
-                self.index[token] = {"idf": 0.0, "postings": {}}
+        # 4. Map tokens with Extents (Zones) and update Collection Frequency
+        for zone_name, tokens in zones.items():
+            for position, token in enumerate(tokens):
+                if token not in self.index:
+                    self.index[token] = {
+                        "idf": 0.0, "collection_frequency": 0, "postings": {}}
 
-            if doc_id not in self.index[token]["postings"]:
-                self.index[token]["postings"][doc_id] = {
-                    "tf": 0.0, "positions": []}
+                self.index[token]["collection_frequency"] += 1
 
-            self.index[token]["postings"][doc_id]["positions"].append(position)
+                if doc_id not in self.index[token]["postings"]:
+                    self.index[token]["postings"][doc_id] = {
+                        "tf": 0.0,
+                        "positions": [],
+                        "zones": set()
+                    }
+
+                self.index[token]["postings"][doc_id]["positions"].append(
+                    position)
+                self.index[token]["postings"][doc_id]["zones"].add(zone_name)
 
     def build_index(self) -> None:
-        """
-        Finalizes the index by calculating the TF and IDF scores for all tokens.
-        This must be called after all documents have been added.
-        """
+        """Finalizes the index by calculating the TF and IDF scores."""
         logger.info(
             f"Calculating TF-IDF scores for "
             f"[cyan]{self.total_documents}[/cyan] documents...")
 
-        # TODO: Use token
-        for _token, data in self.index.items():  # pragma: no cover
-            # 1. Calculate IDF (Inverse Document Frequency)
+        for _token, data in self.index.items():
             doc_frequency = len(data["postings"])
             data["idf"] = math.log(self.total_documents / doc_frequency)
 
-            # 2. Calculate TF (Term Frequency) for each document
             for doc_id, posting in data["postings"].items():
                 term_count = len(posting["positions"])
-                total_words_in_doc = len(self._raw_documents[doc_id])
-                posting["tf"] = term_count / total_words_in_doc
+                total_words_in_doc = self.document_registry[doc_id]["length"]
 
-        # Clear raw documents to free memory since the index is complete
+                posting["tf"] = term_count / \
+                    total_words_in_doc if total_words_in_doc > 0 else 0.0
+                # Convert the set to a list so it can be saved to JSON safely
+                posting["zones"] = list(posting["zones"])
+
         self._raw_documents.clear()
         logger.info(
             f"Index built successfully with "
             f"[green]{len(self.index)}[/green] unique terms.")
 
     def save(self, filepath: str) -> None:
-        """Serializes the index to a JSON file."""
+        """Serializes the index and registry to a JSON file."""
         export_data = {
             "metadata": {"total_documents": self.total_documents},
+            "document_registry": self.document_registry,
             "index": self.index
         }
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(export_data, f, indent=2)
-        logger.info(
-            f"Index successfully saved to [cyan]{filepath}[/cyan]")
+        logger.info(f"Index successfully saved to [cyan]{filepath}[/cyan]")
 
     def load(self, filepath: str) -> None:
-        """Deserializes the index from a JSON file."""
+        """Deserializes the index and registry from a JSON file."""
         try:
             with open(filepath, encoding='utf-8') as f:
                 import_data = json.load(f)
                 self.total_documents = import_data["metadata"]["total_documents"]
+                self.document_registry = import_data.get(
+                    "document_registry", {})
                 self.index = import_data["index"]
             logger.info(
                 f"Loaded index from [cyan]{filepath}[/cyan] "

@@ -1,12 +1,14 @@
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from src.crawler import PoliteCrawler
 from src.indexer import InvertedIndex
-from src.search import SearchEngine
+from src.search import SearchEngine, SearchStrategy
 
 app = typer.Typer(help="Search Engine Tool for quotes.toscrape.com")
 console = Console()
@@ -51,23 +53,26 @@ def build(
                 f"[bold green]Scraping page {page_num}: {current_url}...")
 
             result = crawler.fetch_quotes(current_url)
-            quotes_List = result.get("quotes", [])
+            quotes_list = result.get("quotes", [])
             next_page = result.get("next_page")
 
-            if not quotes_List:
+            if not quotes_list:
                 console.print(
                     f"[yellow]No quotes found on {current_url}. "
                     f"Crawl complete.[/yellow]")
                 break
 
-            for i, quote in enumerate(quotes_List):
+            for i, quote in enumerate(quotes_list):
                 doc_id = f"page_{page_num}_quote_{i}"
-                text = quote.get("text", "")
-                author = quote.get("author", "")
-                tags = " ".join(quote.get("tags", []))
 
-                combined_text = f"{text} {author} {tags}"
-                index.add_document(doc_id, combined_text)
+                # Pass the raw structured data directly to the indexer!
+                index.add_document(
+                    doc_id=doc_id,
+                    text=quote.get("text", ""),
+                    author=quote.get("author", ""),
+                    tags=quote.get("tags", []),
+                    url=current_url
+                )
 
             if next_page:
                 current_url = f"https://quotes.toscrape.com{next_page}"
@@ -133,37 +138,54 @@ def print_word(word: str) -> None:
 
 
 @app.command()
-def find(query: list[str]) -> None:
-    """Finds a given query phrase in the index and returns ranked pages."""
+def find(
+    query: Annotated[str, typer.Argument(help="The search query to execute.")],
+    strategy: Annotated[
+        SearchStrategy,
+        typer.Option("--strategy", "-s",
+                     help="The mathematical ranking algorithm to use.")
+    ] = SearchStrategy.TF_IDF
+) -> None:
+    """Searches the built index and returns ranked snippets."""
     path = get_index_path()
     if not path.exists():
         console.print(
-            "[bold red]Error: Index file not found. Run 'build' first.[/bold red]")
+            "[red]Error: Index not found. Please run 'build' first.[/red]")
         raise typer.Exit(code=1)
 
     index = InvertedIndex()
     index.load(str(path))
     engine = SearchEngine(index)
 
-    full_query = " ".join(query)
-    results = engine.search(full_query)
+    with console.status(f"[bold green]Searching via {strategy.value.upper()}..."):
+        results = engine.search(query, strategy=strategy)
 
     if not results:
-        console.print(
-            f"[yellow]No documents found containing all words in: "
-            f"'{full_query}'[/yellow]"
-        )
+        console.print(f"[yellow]No results found for '{query}'.[/yellow]")
         return
 
     console.print(
-        f"\n[bold green]Found {len(results)} matching documents for "
-        f"'{full_query}':[/bold green]"
-    )
-    table = Table("Rank", "Document ID", "TF-IDF Score")
-    for i, (doc_id, score) in enumerate(results, 1):
-        table.add_row(str(i), doc_id, f"{score:.4f}")
-    console.print(table)
-    print("\n")
+        f"\n[bold green]Found {len(results)} matching documents for '{query}':"
+        f"[/bold green]\n")
+
+    # Print the top 5 results as beautiful Rich Panels
+    for rank, (doc_id, score) in enumerate(results[:5], 1):
+        doc = index.document_registry.get(doc_id, {})
+
+        # Build the snippet layout
+        content = f"[italic]\"{doc.get('text', 'No text available.')}\"[/italic]\n\n"
+        content += f"[bold cyan]Author:[/bold cyan] {doc.get('author', 'Unknown')}\n"
+        content += f"[bold cyan]URL:[/bold cyan] [blue underline]{doc.get('url', '#')}"
+        content += "[/blue underline]"
+
+        panel = Panel(
+            content,
+            title=f"Rank {rank} | Score: {score:.4f} | ID: {doc_id}",
+            title_align="left",
+            border_style="green"
+        )
+        console.print(panel)
+        console.print()  # Add spacing between results
 
 
 if __name__ == "__main__":
