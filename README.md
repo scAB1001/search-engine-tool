@@ -54,7 +54,7 @@ This project uses [uv](https://github.com/astral-sh/uv) as its package and envir
 
 **Clone the repository:**
 ```bash
-    git clone [https://github.com/scAB1001/search-engine-tool.git](https://github.com/scAB1001/search-engine-tool.git)
+    git clone https://github.com/scAB1001/search-engine-tool.git
     cd search-engine-tool
 ```
 
