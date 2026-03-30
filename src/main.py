@@ -1,6 +1,13 @@
+import time
+import xml.etree.ElementTree as ET
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
+from xml.dom import minidom
 
+import requests
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -188,5 +195,101 @@ def find(
         console.print()  # Add spacing between results
 
 
-if __name__ == "__main__":
-    app()
+@app.command()
+def sitemap(
+    output_file: Annotated[str, typer.Option(
+        "--output", "-o", help="The output XML file path.")] = "sitemap.xml"
+) -> None:
+    """
+    Generates a professional XML sitemap by dynamically verifying live HTTP headers.
+    """
+    path = get_index_path()
+    if not path.exists():
+        console.print(
+            "[red]Error: Index not found. Please run 'build' first.[/red]")
+        raise typer.Exit(code=1)
+
+    index = InvertedIndex()
+    index.load(str(path))
+
+    unique_urls = {doc["url"]
+                   for doc in index.document_registry.values() if "url" in doc}
+    if not unique_urls:
+        console.print(
+            "[yellow]No URLs found in the document registry.[/yellow]")
+        return
+
+    # Setup the formal XML Namespace
+    urlset = ET.Element(
+        "urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+
+    # Sort URLs so the homepage is first, followed by paginated routes
+    sorted_urls = sorted(
+        unique_urls, key=lambda u: (len(urlparse(u).path), u))
+
+    with console.status(
+        f"[bold green]Generating sitemap and "
+        f"verifying headers for {len(sorted_urls)} URLs..."
+    ) as status:
+        for url in sorted_urls:
+            status.update(f"[bold green]Pinging header for: {url}")
+
+            # 1. Dynamic Priority calculation based on URL depth
+            path_str = urlparse(url).path
+            if path_str in ("", "/"):
+                priority = "1.0"
+                changefreq = "daily"
+            elif path_str.startswith("/page/"):
+                priority = "0.8"
+                changefreq = "weekly"
+            else:
+                priority = "0.5"
+                changefreq = "monthly"
+
+            # 2. Call the HTTP header regardless (using a lightweight HEAD request)
+            try:
+                response = requests.head(url, timeout=5.0)
+                last_mod_header = response.headers.get("Last-Modified")
+
+                if last_mod_header:
+                    # Convert standard HTTP-date to W3C ISO 8601 Date
+                    dt = parsedate_to_datetime(last_mod_header)
+                    lastmod = dt.strftime("%Y-%m-%d")
+                else:
+                    # Fallback to current UTC date if server omits the header
+                    lastmod = datetime.now(UTC).strftime("%Y-%m-%d")
+            except requests.RequestException:
+                # Fallback on network failure
+                lastmod = datetime.now(UTC).strftime("%Y-%m-%d")
+
+            # 3. Build the XML node tree
+            url_node = ET.SubElement(urlset, "url")
+            ET.SubElement(url_node, "loc").text = url
+            ET.SubElement(url_node, "lastmod").text = lastmod
+            ET.SubElement(url_node, "changefreq").text = changefreq
+            ET.SubElement(url_node, "priority").text = priority
+
+            # A 0.1s sleep to avoid hammering the server with rapid-fire HEAD requests
+            time.sleep(0.1)
+
+    # 4. Use minidom to pretty-print the XML with proper indents
+    xml_str = ET.tostring(urlset, encoding="utf-8")
+    parsed_xml = minidom.parseString(xml_str)
+    pretty_xml = parsed_xml.toprettyxml(indent="  ")
+
+    # Use Path to intelligently handle absolute vs relative paths
+    out_path = Path(output_file)
+    if not out_path.is_absolute():
+        out_path = Path("data") / out_path
+
+    # Ensure the directory exists before writing
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with out_path.open("w", encoding="utf-8") as f:
+        # minidom adds its own XML declaration, so we write it directly
+        f.write(pretty_xml)
+
+    console.print(
+        f"[bold green]Success![/bold green] Professional Sitemap generated at "
+        f"[cyan]{out_path}[/cyan]"
+    )
