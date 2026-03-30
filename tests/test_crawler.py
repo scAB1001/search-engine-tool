@@ -3,9 +3,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-# TODO: Test for RequestException / place in conftest
-from requests.exceptions import ConnectionError, RequestException
-
 from src.crawler import PoliteCrawler
 
 
@@ -14,12 +11,13 @@ def test_crawler_extracts_quotes_successfully(mock_requests_get: MagicMock) -> N
     crawler = PoliteCrawler()
     result = crawler.fetch_quotes("http://fake-url.com")
 
-    # Extract the list from the dictionary
     quotes = result["quotes"]
 
-    assert len(quotes) == 2
+    # The updated conftest fixture only contains 1 quote, but includes a next_page link
+    assert len(quotes) == 1
     assert "Albert Einstein" in quotes[0]["author"]
-    assert "Harry" in quotes[1]["text"]
+    assert result["next_page"] == "/page/2/"
+
     mock_requests_get.assert_called_once_with(
         "http://fake-url.com",
         headers={
@@ -27,16 +25,15 @@ def test_crawler_extracts_quotes_successfully(mock_requests_get: MagicMock) -> N
         timeout=10.0
     )
 
+
 def test_crawler_ignores_malformed_quotes(malformed_html_response: str) -> None:
     """
     Test that the crawler safely ignores quote blocks that are missing
     either the text span or the author tag, triggering the False branch.
     """
-    # TODO: Move all html for testing to fixtures or alike
     crawler = PoliteCrawler()
     result = crawler._parse_html(malformed_html_response)
 
-    # Extract the list from the dictionary
     extracted_quotes = result["quotes"]
 
     assert len(extracted_quotes) == 1
@@ -54,7 +51,6 @@ def test_crawler_enforces_6_second_politeness(
     mock_requests_get: MagicMock
 ) -> None:
     """Test that the crawler strictly enforces the 6-second delay + jitter."""
-    # Force the random jitter to always be exactly 1.0 second for this test
     mock_random.return_value = 1.0
 
     # t=100.0 (End of Request 1)
@@ -65,14 +61,9 @@ def test_crawler_enforces_6_second_politeness(
 
     crawler = PoliteCrawler()
 
-    # First request: skips sleep.
     crawler.fetch_quotes("http://fake-url.com/page/1")
     assert mock_sleep.call_count == 0
 
-    # Second request: 102.0 - 100.0 = 2.0s elapsed.
-    # Base wait: 6.0 - 2.0 = 4.0s.
-    # Jitter: 1.0s.
-    # Total expected sleep: 5.0s.
     crawler.fetch_quotes("http://fake-url.com/page/2")
     mock_sleep.assert_called_once_with(5.0)
 
@@ -85,59 +76,47 @@ def test_crawler_skips_sleep_if_time_elapsed(
     mock_requests_get: MagicMock
 ) -> None:
     """Test that the crawler skips sleep if the 6-second window has naturally passed."""
-
-    # Simulate time passing:
-    # t=100.0 (End of Request 1)
-    # t=110.0 (Start of Request 2. 10 seconds have passed!)
-    # t=112.0 (End of Request 2)
     mock_time.side_effect = [100.0, 110.0, 112.0]
 
     crawler = PoliteCrawler()
-
-    # First request finishes at t=100.0
     crawler.fetch_quotes("http://fake-url.com/page/1")
-
-    # Second request starts at t=110.0.
-    # elapsed_time = 10.0s. time_to_wait = -4.0s.
-    # The `if time_to_wait > 0:` block evaluates to False!
     crawler.fetch_quotes("http://fake-url.com/page/2")
 
-    # Sleep should NEVER be called because time_to_wait was negative
     assert mock_sleep.call_count == 0
 
 
 def test_crawler_rejects_non_html(mock_requests_get: MagicMock) -> None:
     """Test that the crawler safely aborts if the URL points to a non-HTML file."""
-    # Simulate hitting a PDF or JSON endpoint
     mock_requests_get.return_value.headers = {
         "Content-Type": "application/pdf"}
 
     crawler = PoliteCrawler()
     results = crawler.fetch_quotes("http://fake-url.com/document.pdf")
 
-    # It should immediately reject it without crashing or parsing
     assert results == {"quotes": [], "next_page": None}
     assert mock_requests_get.call_count == 1
 
 
-def test_parse_html_extracts_relational_data(relational_html_response) -> None:
-    """Test that the parser successfully extracts tags and author URLs."""
+def test_parse_html_extracts_relational_data(mock_html_response: str) -> None:
+    """Test that the parser successfully extracts tags, author URLs, and pagination."""
     crawler = PoliteCrawler()
-    result = crawler._parse_html(relational_html_response)
+    # Uses the unified mock_html_response instead of the deleted relational fixture
+    result = crawler._parse_html(mock_html_response)
 
     quote = result["quotes"][0]
     assert quote["author_url"] == "/author/Albert-Einstein"
-    assert quote["tags"] == ["science"]
-    assert result["next_page"] is None
+    assert quote["tags"] == ["change", "thinking"]
+    assert result["next_page"] == "/page/2/"
 
 
-def test_parse_html_handles_empty_pagination() -> None:
-    """
-    Test that the crawler safely stops when hitting the 'No quotes found!' edge case.
-    """
-    html = '<div class="col-md-8">No quotes found!</div>'
+def test_crawler_handles_no_quotes_page(mock_requests_get: MagicMock) -> None:
+    """Test that the crawler safely stops when no quotes are found on the page."""
+    # Provide HTML without any quote blocks to simulate the end of pagination
+    mock_requests_get.return_value.text = "<html><body>No quotes found!</body></html>"
+
     crawler = PoliteCrawler()
-    result = crawler._parse_html(html)
+    # Actually call the network-dependent method
+    result = crawler.fetch_quotes("http://fake-url.com/page/99")
 
     assert result["quotes"] == []
     assert result["next_page"] is None
@@ -145,7 +124,6 @@ def test_parse_html_handles_empty_pagination() -> None:
 
 def test_fetch_author_handles_false_positive(mock_requests_get: MagicMock) -> None:
     """Test that the author scraper rejects 200 OK pages with missing data."""
-    # Override the global fixture's text with our empty edge case
     html = '<div class="author-details"><h3 class="author-title"></h3></div>'
     mock_requests_get.return_value.text = html
 
@@ -160,7 +138,6 @@ def test_fetch_author_metadata_success(
     author_html_response: str
 ) -> None:
     """Test that author metadata is successfully parsed from the DOM."""
-    # Inject the HTML fixture into the Network fixture
     mock_requests_get.return_value.text = author_html_response
 
     crawler = PoliteCrawler()
