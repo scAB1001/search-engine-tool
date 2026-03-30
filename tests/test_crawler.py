@@ -11,7 +11,10 @@ from src.crawler import PoliteCrawler
 def test_crawler_extracts_quotes_successfully(mock_requests_get: MagicMock) -> None:
     """Test that the crawler successfully extracts quotes using the mocked HTML."""
     crawler = PoliteCrawler()
-    quotes = crawler.fetch_quotes("http://fake-url.com")
+    result = crawler.fetch_quotes("http://fake-url.com")
+
+    # Extract the list from the dictionary
+    quotes = result["quotes"]
 
     assert len(quotes) == 2
     assert "Albert Einstein" in quotes[0]["author"]
@@ -49,13 +52,14 @@ def test_crawler_ignores_malformed_quotes() -> None:
     """
     crawler = PoliteCrawler()
 
-    # Bypass the network layer and test the parsing engine directly
-    extracted_data = crawler._parse_html(malformed_html)
+    result = crawler._parse_html(malformed_html)
 
-    # It should ignore the 3 malformed blocks and only extract the 1 valid block
-    assert len(extracted_data) == 1
-    assert extracted_data[0]["author"] == "Valid Author"
-    assert extracted_data[0]["text"] == '"I am a valid quote."'
+    # Extract the list from the dictionary
+    extracted_quotes = result["quotes"]
+
+    assert len(extracted_quotes) == 1
+    assert extracted_quotes[0]["author"] == "Valid Author"
+    assert extracted_quotes[0]["text"] == '"I am a valid quote."'
 
 
 @patch("src.crawler.time.sleep")
@@ -132,7 +136,7 @@ def test_crawler_handles_http_errors(
     crawler = PoliteCrawler()
     quotes = crawler.fetch_quotes("http://fake-url.com/does-not-exist")
 
-    assert quotes == []
+    assert quotes == {"quotes": [], "next_page": None}
 
 
 @patch("src.crawler.time.sleep")
@@ -146,7 +150,7 @@ def test_crawler_retries_on_timeout(mock_get: MagicMock, mock_sleep: MagicMock) 
     results = crawler.fetch_quotes("http://fake-url.com")
 
     # It should fail gracefully, returning an empty list
-    assert results == []
+    assert results == {"quotes": [], "next_page": None}
     # It should have attempted exactly 3 times
     assert mock_get.call_count == 3
     # It should have slept for 2 seconds between the first two failed attempts
@@ -167,7 +171,7 @@ def test_crawler_aborts_on_http_error(mock_get: MagicMock) -> None:
     results = crawler.fetch_quotes("http://fake-url.com")
 
     # It should fail gracefully
-    assert results == []
+    assert results == {"quotes": [], "next_page": None}
     # It should only attempt ONCE because a 404 is a permanent error
     assert mock_get.call_count == 1
 
@@ -184,7 +188,7 @@ def test_crawler_rejects_non_html(mock_get: MagicMock) -> None:
     results = crawler.fetch_quotes("http://fake-url.com/document.pdf")
 
     # It should immediately reject it without crashing or parsing
-    assert results == []
+    assert results == {"quotes": [], "next_page": None}
     assert mock_get.call_count == 1
 
 
@@ -201,9 +205,120 @@ def test_crawler_retries_on_connection_error(
     results = crawler.fetch_quotes("http://fake-url.com")
 
     # It should fail gracefully, returning an empty list
-    assert results == []
+    assert results == {"quotes": [], "next_page": None}
     # It should have attempted exactly 3 times
     assert mock_requests_get.call_count == 3
     # It should have slept for exactly 2 seconds between the first two failed attempts
     assert mock_sleep.call_count == 2
+    mock_sleep.assert_called_with(2.0)
+
+
+def test_parse_html_extracts_relational_data() -> None:
+    """Test that the parser successfully extracts tags and author URLs."""
+    html = """
+    <div class="quote">
+        <span class="text">"Test Quote"</span>
+        <span>by <small class="author">Albert Einstein</small>
+        <a href="/author/Albert-Einstein">(about)</a></span>
+        <div class="tags">
+            <a class="tag" href="/tag/science/page/1/">science</a>
+        </div>
+    </div>
+    """
+    crawler = PoliteCrawler()
+    result = crawler._parse_html(html)
+
+    quote = result["quotes"][0]
+    assert quote["author_url"] == "/author/Albert-Einstein"
+    assert quote["tags"] == ["science"]
+    assert result["next_page"] is None
+
+
+def test_parse_html_handles_empty_pagination() -> None:
+    """
+    Test that the crawler safely stops when hitting the 'No quotes found!' edge case.
+    """
+    html = '<div class="col-md-8">No quotes found!</div>'
+    crawler = PoliteCrawler()
+    result = crawler._parse_html(html)
+
+    assert result["quotes"] == []
+    assert result["next_page"] is None
+
+
+@patch("src.crawler.requests.get")
+def test_fetch_author_handles_false_positive(
+    mock_get: MagicMock,
+    mock_requests_get: MagicMock
+) -> None:
+    """Test that the author scraper rejects 200 OK pages with missing data."""
+    mock_response = MagicMock()
+    mock_response.headers = {"Content-Type": "text/html"}
+    # This simulates the /author/Albert-EinsteinXXX/ page
+    html='<div class="author-details"><h3 class="author-title"></h3></div>'
+    mock_response.text = html
+    mock_get.return_value = mock_response
+
+    crawler = PoliteCrawler()
+    author_data = crawler.fetch_author_metadata("http://fake.com/author")
+
+    assert author_data == {}
+
+
+@patch("src.crawler.requests.get")
+def test_fetch_author_metadata_success(mock_get: MagicMock) -> None:
+    """Test that author metadata is successfully parsed from the DOM."""
+    mock_response = MagicMock()
+    mock_response.headers = {"Content-Type": "text/html"}
+    mock_response.text = """
+    <div class="author-details">
+        <h3 class="author-title">Albert Einstein</h3>
+        <span class="author-born-date">March 14, 1879</span>
+        <span class="author-born-location">in Ulm, Germany</span>
+        <div class="author-description">A theoretical physicist.</div>
+    </div>
+    """
+    mock_get.return_value = mock_response
+
+    crawler = PoliteCrawler()
+    author = crawler.fetch_author_metadata("http://fake-url.com/author")
+
+    assert author["name"] == "Albert Einstein"
+    assert author["born_date"] == "March 14, 1879"
+    assert "Germany" in author["born_location"]
+    assert "physicist" in author["description"]
+
+
+@patch("src.crawler.time.sleep")
+@patch("src.crawler.requests.get")
+def test_fetch_author_metadata_exceptions(
+    mock_get: MagicMock,
+    mock_sleep: MagicMock
+) -> None:
+    """Test that the author fetcher strictly adheres to granular retry logic."""
+    crawler = PoliteCrawler()
+
+    # 1. Test Permanent HTTP Error (404/500)
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "404")
+    mock_get.return_value = mock_response
+    assert crawler.fetch_author_metadata("http://fake-url.com/author") == {}
+    assert mock_get.call_count == 1  # Fails instantly
+
+    mock_get.reset_mock()
+
+    # 2. Test Timeout (10s penalty)
+    mock_get.side_effect = requests.exceptions.Timeout("Timeout")
+    assert crawler.fetch_author_metadata("http://fake-url.com/author") == {}
+    assert mock_get.call_count == 3  # Retries 3 times
+    mock_sleep.assert_called_with(10.0)
+
+    mock_get.reset_mock()
+
+    # 3. Test ConnectionError (2s penalty)
+    mock_get.side_effect = requests.exceptions.ConnectionError(
+        "Connection Refused")
+    assert crawler.fetch_author_metadata("http://fake-url.com/author") == {}
+    assert mock_get.call_count == 3  # Retries 3 times
     mock_sleep.assert_called_with(2.0)

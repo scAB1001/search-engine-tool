@@ -1,4 +1,5 @@
 import time
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
@@ -35,9 +36,9 @@ class PoliteCrawler:
                 f"Politeness window active. Sleeping for {time_to_wait:.2f} seconds...")
             time.sleep(time_to_wait)
 
-    def fetch_quotes(self, url: str) -> list[dict[str, str]]:
+    def fetch_quotes(self, url: str) -> dict[str, Any]:
         """
-        Fetches and parses quotes from a given URL, utilising a retry mechanism
+        Fetches and parses quotes from a given URL, utilizing a retry mechanism
         for transient network failures and strict timeout limits.
         """
         self._enforce_politeness()
@@ -46,18 +47,19 @@ class PoliteCrawler:
         for attempt in range(1, max_retries + 1):
             try:
                 # Use a 10-second timeout to prevent hanging on dead network connections
-                response = requests.get(url, headers=self.headers, timeout=10.0)
-                response.raise_for_status()  # Raises HTTPError for responses 4xx/5xx
+                response = requests.get(
+                    url, headers=self.headers, timeout=10.0)
+                response.raise_for_status()
 
                 # Record the exact time the request finished
                 self.last_request_time = time.time()
 
-                # Respons   e Headers Verification
+                # Response Headers Verification
                 content_type = response.headers.get("Content-Type", "")
                 if "text/html" not in content_type:
                     logger.warning(
                         f"Skipping {url}: Expected text/html, got {content_type}")
-                    return []
+                    return {"quotes": [], "next_page": None}
 
                 return self._parse_html(response.text)
 
@@ -68,7 +70,7 @@ class PoliteCrawler:
                     f"for {url}: {e}. Waiting 10s.")
                 if attempt == max_retries:
                     logger.error(f"Max retries reached for {url}. Abandoning.")
-                    return []
+                    return {"quotes": [], "next_page": None}
                 time.sleep(10.0)
 
             except requests.exceptions.ConnectionError as e:
@@ -79,48 +81,136 @@ class PoliteCrawler:
                 )
                 if attempt == max_retries:
                     logger.error(f"Max retries reached for {url}. Abandoning.")
-                    return []
+                    return {"quotes": [], "next_page": None}
                 time.sleep(2.0)
 
             except requests.exceptions.HTTPError as e:
                 # 4xx or 5xx errors. Pointless retrying a 404.
                 logger.error(f"HTTP Error for {url}: {e}")
-                return []
+                return {"quotes": [], "next_page": None}
 
-        return []  # pragma: no cover
+        # TODO: Create annotation for the empty quote state and others
+        return {"quotes": [], "next_page": None}  # pragma: no cover
 
-    def _parse_html(self, html_content: str) -> list[dict[str, str]]:
+    def fetch_author_metadata(self, author_url: str) -> dict[str, str]:
         """
-        Parses HTML using lxml, SoupStrainer for memory efficiency,
-        and CSS selectors for precise extraction.
+        Navigates to an author's page and extracts their metadata.
+        Includes protection against "False Positive" 200 OK pages with empty data.
         """
-        # Strain out navbars, footers, and scripts before RAM ingestion.
-        # Strain for quotes and the 'next' button so our loop can still paginate later.
-        strainer = SoupStrainer(class_=["quote", "next"])
+        self._enforce_politeness()
+        max_retries = 3
 
-        # Bypass the bottleneck by using 'html.parser' instead of the C-based 'lxml'
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = requests.get(
+                    author_url, headers=self.headers, timeout=10.0)
+                response.raise_for_status()
+
+                # CRITICAL: Record the exact time the request finished
+                self.last_request_time = time.time()
+
+                if "text/html" not in response.headers.get("Content-Type", ""):
+                    logger.warning(
+                        f"Skipping {author_url}: Expected text/html")
+                    return {} # pragma: no cover
+
+                # Memory Saver: Only parse the author-details div
+                strainer = SoupStrainer(class_="author-details")
+                soup = BeautifulSoup(
+                    response.text, "lxml", parse_only=strainer)
+
+                title_node = soup.select_one(".author-title")
+                name = " ".join(
+                    title_node.stripped_strings) if title_node else ""
+
+                # EDGE CASE DEFENSE: The "False Positive" Trap
+                if not name:
+                    logger.warning(
+                        f"False Positive detected at {author_url}. Empty author data.")
+                    return {}
+
+                born_date_node = soup.select_one(".author-born-date")
+                born_location_node = soup.select_one(".author-born-location")
+                description_node = soup.select_one(".author-description")
+
+                return {
+                    "name": name,
+                    "born_date": " ".join(born_date_node.stripped_strings)
+                        if born_date_node else "",
+                    "born_location": " ".join(born_location_node.stripped_strings)
+                        if born_location_node else "",
+                    "description": " ".join(description_node.stripped_strings)
+                        if description_node else ""
+                }
+
+            except requests.exceptions.Timeout as e:
+                logger.warning(
+                    f"Timeout on attempt {attempt}/{max_retries} "
+                    f"for author {author_url}: {e}. Waiting 10s.")
+                if attempt == max_retries:
+                    logger.error(
+                        f"Max retries reached for author {author_url}. Abandoning.")
+                    return {}
+                time.sleep(10.0)
+
+            except requests.exceptions.ConnectionError as e:
+                logger.warning(
+                    f"Connection error on attempt {attempt}/{max_retries} "
+                    f"for author {author_url}: {e}")
+                if attempt == max_retries:
+                    logger.error(
+                        f"Max retries reached for author {author_url}. Abandoning.")
+                    return {}
+                time.sleep(2.0)
+
+            except requests.exceptions.HTTPError as e:
+                logger.error(f"HTTP Error for author {author_url}: {e}")
+                return {}
+
+        return {}  # pragma: no cover
+
+    def _parse_html(self, html_content: str) -> dict[str, Any]:
+        """
+        Parses HTML using lxml and CSS selectors.
+        Returns a dictionary containing the extracted quotes and the 'next' page URL.
+        """
+        # EDGE CASE DEFENSE: Out-of-Bounds Pagination
+        if "No quotes found!" in html_content:
+            logger.info("Pagination boundary reached (No quotes found!).")
+            return {"quotes": [], "next_page": None}
+
+        strainer = SoupStrainer(class_=["quote", "pager"])
         soup = BeautifulSoup(html_content, "lxml", parse_only=strainer)
 
-        parsed_data = []
+        parsed_quotes = []
 
-        # Use CSS Selectors (.select) instead of .find_all
         for quote_block in soup.select(".quote"):
-
-            # Extract data with .stripped_strings generator
             text_node = quote_block.select_one(".text")
             text = " ".join(text_node.stripped_strings) if text_node else ""
 
             author_node = quote_block.select_one(".author")
-            author = " ".join(
+            author_name = " ".join(
                 author_node.stripped_strings) if author_node else ""
 
-            if text and author:
-                parsed_data.append({
+            # Relational Data Extraction
+            author_link_node = quote_block.select_one("a[href^='/author/']")
+            author_url = author_link_node["href"] if author_link_node else ""
+
+            tags = [tag.get_text(strip=True)
+                    for tag in quote_block.select(".tag")]
+
+            if text and author_name:
+                parsed_quotes.append({
                     "text": text,
-                    "author": author
+                    "author": author_name,
+                    "author_url": author_url,
+                    "tags": tags
                 })
 
-            # Physically destroy the node to free RAM
             quote_block.decompose()
 
-        return parsed_data
+        # Extract the Next Page link to safely drive the while loop
+        next_btn = soup.select_one(".next > a")
+        next_page = next_btn["href"] if next_btn else None
+
+        return {"quotes": parsed_quotes, "next_page": next_page}
