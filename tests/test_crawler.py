@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
 import requests
 
 # TODO: Test for RequestException / place in conftest
@@ -26,33 +27,14 @@ def test_crawler_extracts_quotes_successfully(mock_requests_get: MagicMock) -> N
         timeout=10.0
     )
 
-
-def test_crawler_ignores_malformed_quotes() -> None:
+def test_crawler_ignores_malformed_quotes(malformed_html_response: str) -> None:
     """
     Test that the crawler safely ignores quote blocks that are missing
     either the text span or the author tag, triggering the False branch.
     """
-    malformed_html = """
-    <html>
-        <body>
-            <div class="quote">
-                <span class="text">"I have no author."</span>
-            </div>
-            <div class="quote">
-                <small class="author">Ghost Writer</small>
-            </div>
-            <div class="quote">
-            </div>
-            <div class="quote">
-                <span class="text">"I am a valid quote."</span>
-                <small class="author">Valid Author</small>
-            </div>
-        </body>
-    </html>
-    """
+    # TODO: Move all html for testing to fixtures or alike
     crawler = PoliteCrawler()
-
-    result = crawler._parse_html(malformed_html)
+    result = crawler._parse_html(malformed_html_response)
 
     # Extract the list from the dictionary
     extracted_quotes = result["quotes"]
@@ -120,113 +102,24 @@ def test_crawler_skips_sleep_if_time_elapsed(
     assert mock_sleep.call_count == 0
 
 
-@patch("src.crawler.time.sleep")
-@patch("src.crawler.requests.get")
-def test_crawler_handles_http_errors(
-    mock_get: MagicMock,
-    mock_sleep: MagicMock
-) -> None:
-    """Test that the crawler gracefully handles 404/500 errors."""
-    mock_response = MagicMock()
-    # Change RequestException to HTTPError
-    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-        "404 Not Found")
-    mock_get.return_value = mock_response
-
-    crawler = PoliteCrawler()
-    quotes = crawler.fetch_quotes("http://fake-url.com/does-not-exist")
-
-    assert quotes == {"quotes": [], "next_page": None}
-
-
-@patch("src.crawler.time.sleep")
-@patch("src.crawler.requests.get")
-def test_crawler_retries_on_timeout(mock_get: MagicMock, mock_sleep: MagicMock) -> None:
-    """Test that the crawler retries up to 3 times on a ConnectionError/Timeout."""
-    # Force the mock to raise a Timeout exception 3 times in a row
-    mock_get.side_effect = requests.exceptions.Timeout("Connection timed out")
-
-    crawler = PoliteCrawler()
-    results = crawler.fetch_quotes("http://fake-url.com")
-
-    # It should fail gracefully, returning an empty list
-    assert results == {"quotes": [], "next_page": None}
-    # It should have attempted exactly 3 times
-    assert mock_get.call_count == 3
-    # It should have slept for 2 seconds between the first two failed attempts
-    assert mock_sleep.call_count == 2
-    mock_sleep.assert_called_with(10.0)
-
-
-@patch("src.crawler.requests.get")
-def test_crawler_aborts_on_http_error(mock_get: MagicMock) -> None:
-    """Test that the crawler instantly aborts on 404s without retrying."""
-    # Force a 404 Not Found error
-    mock_response = MagicMock()
-    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-        "404 Not Found")
-    mock_get.return_value = mock_response
-
-    crawler = PoliteCrawler()
-    results = crawler.fetch_quotes("http://fake-url.com")
-
-    # It should fail gracefully
-    assert results == {"quotes": [], "next_page": None}
-    # It should only attempt ONCE because a 404 is a permanent error
-    assert mock_get.call_count == 1
-
-
-@patch("src.crawler.requests.get")
-def test_crawler_rejects_non_html(mock_get: MagicMock) -> None:
+def test_crawler_rejects_non_html(mock_requests_get: MagicMock) -> None:
     """Test that the crawler safely aborts if the URL points to a non-HTML file."""
-    mock_response = MagicMock()
     # Simulate hitting a PDF or JSON endpoint
-    mock_response.headers = {"Content-Type": "application/pdf"}
-    mock_get.return_value = mock_response
+    mock_requests_get.return_value.headers = {
+        "Content-Type": "application/pdf"}
 
     crawler = PoliteCrawler()
     results = crawler.fetch_quotes("http://fake-url.com/document.pdf")
 
     # It should immediately reject it without crashing or parsing
     assert results == {"quotes": [], "next_page": None}
-    assert mock_get.call_count == 1
+    assert mock_requests_get.call_count == 1
 
 
-@patch("src.crawler.time.sleep")
-def test_crawler_retries_on_connection_error(
-    mock_sleep: MagicMock,
-    mock_requests_get: MagicMock
-) -> None:
-    """Test that the crawler retries up to 3 times specifically on a ConnectionError."""
-    # Override the global fixture to simulate a connection refusal
-    mock_requests_get.side_effect = ConnectionError("Connection refused")
-
-    crawler = PoliteCrawler()
-    results = crawler.fetch_quotes("http://fake-url.com")
-
-    # It should fail gracefully, returning an empty list
-    assert results == {"quotes": [], "next_page": None}
-    # It should have attempted exactly 3 times
-    assert mock_requests_get.call_count == 3
-    # It should have slept for exactly 2 seconds between the first two failed attempts
-    assert mock_sleep.call_count == 2
-    mock_sleep.assert_called_with(2.0)
-
-
-def test_parse_html_extracts_relational_data() -> None:
+def test_parse_html_extracts_relational_data(relational_html_response) -> None:
     """Test that the parser successfully extracts tags and author URLs."""
-    html = """
-    <div class="quote">
-        <span class="text">"Test Quote"</span>
-        <span>by <small class="author">Albert Einstein</small>
-        <a href="/author/Albert-Einstein">(about)</a></span>
-        <div class="tags">
-            <a class="tag" href="/tag/science/page/1/">science</a>
-        </div>
-    </div>
-    """
     crawler = PoliteCrawler()
-    result = crawler._parse_html(html)
+    result = crawler._parse_html(relational_html_response)
 
     quote = result["quotes"][0]
     assert quote["author_url"] == "/author/Albert-Einstein"
@@ -246,18 +139,11 @@ def test_parse_html_handles_empty_pagination() -> None:
     assert result["next_page"] is None
 
 
-@patch("src.crawler.requests.get")
-def test_fetch_author_handles_false_positive(
-    mock_get: MagicMock,
-    mock_requests_get: MagicMock
-) -> None:
+def test_fetch_author_handles_false_positive(mock_requests_get: MagicMock) -> None:
     """Test that the author scraper rejects 200 OK pages with missing data."""
-    mock_response = MagicMock()
-    mock_response.headers = {"Content-Type": "text/html"}
-    # This simulates the /author/Albert-EinsteinXXX/ page
-    html='<div class="author-details"><h3 class="author-title"></h3></div>'
-    mock_response.text = html
-    mock_get.return_value = mock_response
+    # Override the global fixture's text with our empty edge case
+    html = '<div class="author-details"><h3 class="author-title"></h3></div>'
+    mock_requests_get.return_value.text = html
 
     crawler = PoliteCrawler()
     author_data = crawler.fetch_author_metadata("http://fake.com/author")
@@ -265,20 +151,13 @@ def test_fetch_author_handles_false_positive(
     assert author_data == {}
 
 
-@patch("src.crawler.requests.get")
-def test_fetch_author_metadata_success(mock_get: MagicMock) -> None:
+def test_fetch_author_metadata_success(
+    mock_requests_get: MagicMock,
+    author_html_response: str
+) -> None:
     """Test that author metadata is successfully parsed from the DOM."""
-    mock_response = MagicMock()
-    mock_response.headers = {"Content-Type": "text/html"}
-    mock_response.text = """
-    <div class="author-details">
-        <h3 class="author-title">Albert Einstein</h3>
-        <span class="author-born-date">March 14, 1879</span>
-        <span class="author-born-location">in Ulm, Germany</span>
-        <div class="author-description">A theoretical physicist.</div>
-    </div>
-    """
-    mock_get.return_value = mock_response
+    # Inject the HTML fixture into the Network fixture
+    mock_requests_get.return_value.text = author_html_response
 
     crawler = PoliteCrawler()
     author = crawler.fetch_author_metadata("http://fake-url.com/author")
@@ -289,36 +168,58 @@ def test_fetch_author_metadata_success(mock_get: MagicMock) -> None:
     assert "physicist" in author["description"]
 
 
+@pytest.mark.parametrize("exception, expected_sleep_time, expected_calls", [
+    (requests.exceptions.HTTPError("404 Not Found"), 0.0, 1),
+    (requests.exceptions.Timeout("Connection timed out"), 10.0, 3),
+    (requests.exceptions.ConnectionError("Connection refused"), 2.0, 3)
+])
 @patch("src.crawler.time.sleep")
-@patch("src.crawler.requests.get")
-def test_fetch_author_metadata_exceptions(
-    mock_get: MagicMock,
-    mock_sleep: MagicMock
+def test_crawler_network_exceptions(
+    mock_sleep: MagicMock,
+    mock_requests_get: MagicMock,
+    exception: Exception,
+    expected_sleep_time: float,
+    expected_calls: int
 ) -> None:
-    """Test that the author fetcher strictly adheres to granular retry logic."""
+    """Test that fetch_quotes adheres to retry logic using parametrization."""
+    mock_requests_get.side_effect = exception
+
     crawler = PoliteCrawler()
+    results = crawler.fetch_quotes("http://fake-url.com")
 
-    # 1. Test Permanent HTTP Error (404/500)
-    mock_response = MagicMock()
-    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-        "404")
-    mock_get.return_value = mock_response
+    assert results == {"quotes": [], "next_page": None}
+    assert mock_requests_get.call_count == expected_calls
+
+    if expected_sleep_time > 0:
+        assert mock_sleep.call_count == expected_calls - 1
+        mock_sleep.assert_called_with(expected_sleep_time)
+    else:
+        assert mock_sleep.call_count == 0
+
+
+@pytest.mark.parametrize("exception, expected_sleep_time, expected_calls", [
+    (requests.exceptions.HTTPError("404 Not Found"), 0.0, 1),
+    (requests.exceptions.Timeout("Connection timed out"), 10.0, 3),
+    (requests.exceptions.ConnectionError("Connection refused"), 2.0, 3)
+])
+@patch("src.crawler.time.sleep")
+def test_fetch_author_metadata_exceptions(
+    mock_sleep: MagicMock,
+    mock_requests_get: MagicMock,
+    exception: Exception,
+    expected_sleep_time: float,
+    expected_calls: int
+) -> None:
+    """Test that fetch_author_metadata adheres to retry logic using parametrization."""
+    mock_requests_get.side_effect = exception
+
+    crawler = PoliteCrawler()
     assert crawler.fetch_author_metadata("http://fake-url.com/author") == {}
-    assert mock_get.call_count == 1  # Fails instantly
 
-    mock_get.reset_mock()
+    assert mock_requests_get.call_count == expected_calls
 
-    # 2. Test Timeout (10s penalty)
-    mock_get.side_effect = requests.exceptions.Timeout("Timeout")
-    assert crawler.fetch_author_metadata("http://fake-url.com/author") == {}
-    assert mock_get.call_count == 3  # Retries 3 times
-    mock_sleep.assert_called_with(10.0)
-
-    mock_get.reset_mock()
-
-    # 3. Test ConnectionError (2s penalty)
-    mock_get.side_effect = requests.exceptions.ConnectionError(
-        "Connection Refused")
-    assert crawler.fetch_author_metadata("http://fake-url.com/author") == {}
-    assert mock_get.call_count == 3  # Retries 3 times
-    mock_sleep.assert_called_with(2.0)
+    if expected_sleep_time > 0:
+        assert mock_sleep.call_count == expected_calls - 1
+        mock_sleep.assert_called_with(expected_sleep_time)
+    else:
+        assert mock_sleep.call_count == 0
