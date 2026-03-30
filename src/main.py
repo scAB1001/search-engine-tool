@@ -184,13 +184,13 @@ def print_word(
 
     data = index.index[word_clean]
 
-    console.print(f"\n[bold cyan]Word:[/bold cyan] {word_clean}")
-    console.print(
-        f"[bold cyan](TF-IDF/BM25) Base Score:[/bold cyan] {data['idf']:.4f}")
-    console.print(
-        f"[bold cyan]Collection Frequency:[/bold cyan] "
-        f"{data.get('collection_frequency', 0)} occurrences "
-        f"across {len(data['postings'])} documents.\n")
+    content = f"\n[bold cyan] Word:[/bold cyan]\t\t\t[italic]{word_clean}[/italic]\n"
+    content += f"[bold cyan] Base Score:[/bold cyan]\t\t{data['idf']:.4f}\n"
+    content += "[bold cyan] Collection Frequency:[/bold cyan]\t"
+    content += f"{data.get('collection_frequency', 0)} occurrences "
+    content += f"across {len(data['postings'])} documents.\n"
+
+    console.print(content)
 
     table = Table("Document ID", "Term Frequency (TF)", "Positions", "Author Context")
     for doc_id, stats in data["postings"].items():
@@ -234,8 +234,8 @@ def find(
         return
 
     console.print(
-        f"\n[bold green]Found {len(results)} matching documents for "
-        f"'{query_str}':[/bold green]\n")
+        f"\n[bold green]Found {len(results)} matching document(s) for "
+        f"[italic]{query_str}[/italic]:[/bold green]\n")
 
     # Pre-tokenize and stem the query to find what we are looking for
     query_stems = set(index.tokenize(query_str))
@@ -282,9 +282,9 @@ def find(
                 f"ID: {doc_id}"
             ),
             title_align="left",
+            style="on grey15",
             border_style="green",
             padding=(1, 2),
-            style="on grey11"
         )
         console.print(panel)
         console.print()

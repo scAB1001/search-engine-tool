@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 # Custom bash scripts
-git.sh
+*.sh
 
 # Custom files
 *copy*

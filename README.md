@@ -75,7 +75,7 @@ This project uses [uv](https://github.com/astral-sh/uv) as its package and envir
     uv export --format requirements.txt --output-file requirements.txt
 ```
 
-#### Run within the virtual environment
+#### Run within the virtual environment (for development)
 
 **Install dependencies and the CLI executable natively:**
 ```bash
@@ -89,12 +89,14 @@ This project uses [uv](https://github.com/astral-sh/uv) as its package and envir
     source .venv/bin/activate
 ```
 
-#### Run from any environment
+#### Run from any environment (for production LTS)
 
 **Install dependencies and the CLI executable globally:**
 ```bash
 uv tool install .
 ```
+
+*Tip: If you make changes and still wish to run it globally, run the command with `-n --reinstall'.*
 
 #### Enable Dynamic Autocompletion (Optional but recommended)
 
