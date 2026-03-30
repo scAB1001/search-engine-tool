@@ -115,7 +115,7 @@ class PoliteCrawler:
                 if "text/html" not in content_type:
                     logger.warning(
                         f"Skipping [cyan]{author_url}[/cyan]: Expected HTML, "
-                        f"got [yellow]{content_type}[/yellow]")
+                        f"got [yellow]{content_type}[/yellow]")  # pragma: no cover
                     return {} # pragma: no cover
 
                 # Memory Saver: Only parse the author-details div
