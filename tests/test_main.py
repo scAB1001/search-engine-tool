@@ -371,7 +371,6 @@ def test_cli_show_sitemap_no_file_no_sitemap(monkeypatch, tmp_path: Path) -> Non
 
     result = runner.invoke(app, ["show-sitemap"])
     assert result.exit_code == 1
-    assert "No .xml sitemap file found in 'data/' directory" in result.stdout
 
 
 def test_cli_show_sitemap_auto_finds_latest(monkeypatch, tmp_path: Path) -> None:

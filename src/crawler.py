@@ -20,7 +20,8 @@ class PoliteCrawler:
         self.last_request_time: float = 0.0
         # Identify our crawler to the server administrators
         self.headers = {
-            "User-Agent": "QuotesSearchEngineBot/1.0 (Educational Project)"}
+            "User-Agent": "QuotesSearchEngineBot/1.0 (Educational Project)"
+        }
 
     def _enforce_politeness(self) -> None:
         """
@@ -44,6 +45,10 @@ class PoliteCrawler:
             )
             time.sleep(total_sleep)
 
+    def _record_request(self) -> None:
+        """Call this immediately after a request completes (success or failure)."""
+        self.last_request_time = time.time()
+
     def fetch_quotes(self, url: str) -> dict[str, Any]:
         """
         Fetches and parses quotes from a given URL, utilizing a retry mechanism
@@ -58,22 +63,22 @@ class PoliteCrawler:
                 response = requests.get(
                     url, headers=self.headers, timeout=10.0)
                 response.raise_for_status()
-
-                # Record the exact time the request finished
-                self.last_request_time = time.time()
+                self._record_request()
 
                 # Response Headers Verification
                 content_type = response.headers.get("Content-Type", "")
                 if "text/html" not in content_type:
                     logger.warning(
                         f"Skipping [cyan]{url}[/cyan]: Expected HTML, got "
-                        f"[yellow]{content_type}[/yellow]")
+                        f"[yellow]{content_type}[/yellow]"
+                    )
                     return {"quotes": [], "next_page": None}
 
                 return self._parse_html(response.text)
 
             except requests.exceptions.Timeout:
                 # Granular Exception Handling - 10s wait for Timeouts
+                self._record_request()
                 logger.warning(
                     f"Timeout fetching [cyan]{url}[/cyan]"
                     f"(Attempt {attempt}/{max_retries}). Waiting 10s...")
@@ -84,22 +89,43 @@ class PoliteCrawler:
 
             except requests.exceptions.ConnectionError:
                 # Granular Exception Handling - 2s wait for Connection Errors
+                self._record_request()
                 logger.warning(
                     f"Connection error fetching [cyan]{url}[/cyan] "
-                    f"(Attempt {attempt}/{max_retries}). Waiting 2s...")
+                    f"(Attempt {attempt}/{max_retries}). Waiting 2s..."
+                )
                 if attempt == max_retries:
                     logger.error(
-                        f"Failed to fetch [cyan]{url}[/cyan]: Max retries exhausted.")
+                        f"Failed to fetch [cyan]{url}[/cyan]: Max retries exhausted."
+                    )
                     return {"quotes": [], "next_page": None}
                 time.sleep(2.0)
 
             except requests.exceptions.HTTPError as e:
                 # 4xx or 5xx errors. Pointless retrying a 404.
+                self._record_request()
                 logger.error(f"HTTP Error for [cyan]{url}[/cyan]: {e}")
                 return {"quotes": [], "next_page": None}
 
         # TODO: Create annotation for the empty quote state and others
         return {"quotes": [], "next_page": None}  # pragma: no cover
+
+    def fetch_headers(self, url: str) -> dict[str, str] | None:
+        """
+        Perform a HEAD request respecting the politeness window.
+        Returns the headers dictionary, or None on failure.
+        """
+        self._enforce_politeness()
+        try:
+            response = requests.head(url, headers=self.headers, timeout=10.0)
+            response.raise_for_status()
+            self._record_request()
+            return dict(response.headers)
+        except Exception as e:
+            self._record_request()
+            logger.warning(f"HEAD request failed for [cyan]{url}[/cyan]: {e}")
+            return None
+
 
     def fetch_author_metadata(self, author_url: str) -> dict[str, str]:
         """
