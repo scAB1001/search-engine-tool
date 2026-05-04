@@ -14,6 +14,10 @@ This project is an elite, production-grade CLI Search Engine built for the COMP3
 * **Ethical Web Crawling:** Strictly enforces a 6-second politeness window with dynamic jitter to prevent server overload.
 * **DevOps & UI Polish:** Features a beautiful `Rich` terminal UI, dynamic `TAB` autocompletion for index keys, programmatic XML Sitemap generation via HTTP `HEAD` requests, and 100% test coverage.
 
+### robots.txt compliance
+
+The crawler respects a 6‑second politeness window with jitter but does not parse robots.txt because quotes.toscrape.com is a dedicated training site with no restrictive directives. In a production system, a robots.txt parser would be implemented.
+
 ---
 
 ## 📂 Structure and Architecture
@@ -24,7 +28,7 @@ search-engine-tool/
 ├── data/                    # Local storage for the compiled JSON index and XML sitemap
 ├── src/                     # Core Application Logic
 │   ├── crawler.py           # Handles HTTP requests, LXML parsing, and strict rate-limiting
-│   ├── indexer.py           # Tokenises text (Porter Stemmer) and maps the inverted index/extents
+│   ├── indexer.py           # Tokenises text (Porter Stemmer) and maps the inverted index
 │   ├── search.py            # Executes DAAT queries against the index (TF-IDF/BM25)
 │   ├── logger.py            # Centralised logging configuration
 │   └── main.py              # Typer CLI entrypoint with Rich UI and Autocompletion
@@ -54,46 +58,46 @@ This project uses [uv](https://github.com/astral-sh/uv) as its package and envir
 
 **Clone the repository:**
 ```bash
-    git clone https://github.com/scAB1001/search-engine-tool.git
-    cd search-engine-tool
+  git clone https://github.com/scAB1001/search-engine-tool.git
+  cd search-engine-tool
 ```
 
 **Install and Update Dependencies:**
 ```bash
-    # Sync the dependencies from the lock file
-    uv sync --all-groups
+  # Sync the dependencies from the lock file
+  uv sync --all-groups
 
-    # Update/install any dependencies
-    uv run pre-commit install
-    uv run pre-commit autoupdate
+  # Update/install any dependencies
+  uv run pre-commit install
+  uv run pre-commit autoupdate
 
-    # Regenerate Lock file
-    uv lock --upgrade
-    uv lock --check
+  # Regenerate Lock file
+  uv lock --upgrade
+  uv lock --check
 
-    # Export requirements
-    uv export --format requirements.txt --output-file requirements.txt
+  # Export requirements
+  uv export --format requirements.txt --output-file requirements.txt
 ```
 
 #### Run within the virtual environment (for development)
 
 **Install dependencies and the CLI executable natively:**
 ```bash
-    uv pip install -e .
+  uv pip install -e .
 ```
 
 *Note: Installing with `-e .` links the `search-engine` command directly to your virtual environment.*
 
 **Activate the Virtual Environment:**
 ```bash
-    source .venv/bin/activate
+  source .venv/bin/activate
 ```
 
 #### Run from any environment (for production LTS)
 
 **Install dependencies and the CLI executable globally:**
 ```bash
-uv tool install .
+  uv tool install .
 ```
 
 *Tip: If you make changes and still wish to run it globally, run the command with `-n --reinstall'.*
@@ -101,8 +105,8 @@ uv tool install .
 #### Enable Dynamic Autocompletion (Optional but recommended)
 
 ```bash
-    search-engine --install-completion
-    source ~/.bashrc  # Or ~/.zshrc depending on your shell
+  search-engine --install-completion
+  source ~/.bashrc  # Or ~/.zshrc depending on your shell
 ```
 
 ---
@@ -115,47 +119,53 @@ The CLI is divided into Database Operations, Search Operations, and Utilities. Y
 
 Crawls the target website, processes the text, calculates global term frequencies, and serialises the inverted index to disk.
 ```bash
-search-engine build
-# Or, limit the crawl to a specific number of pages:
-search-engine build --max-pages 3
+  search-engine build
+
+  # Or, limit the crawl to a specific number of pages:
+  search-engine build --max-pages 3
 ```
 
 ### 2. Verify the Index (`load`)
 
 Loads the index into memory to verify data integrity and file structure.
 ```bash
-search-engine load
+  search-engine load
 ```
 
 ### 3. Inspect Term Statistics (`print`)
 
 Outputs the global Collection Frequency, Base IDF score, and a tabular breakdown of Term Frequencies and positional extents across all documents containing the word.
 
-*Tip: Try pressing `TAB` after typing part of your search term to see auto-completed suggestions from your live database!*
+*Tip: Press `TAB` after typing part of your search term to see auto-completed suggestions from your database!*
 
 ```bash
-search-engine print ein[TAB]
+  search-engine print ein[TAB]
 ```
 
 ### 4. Search the Index (`find`)
 
-Executes a multi-word query against the index. Returns beautifully formatted Rich panels containing contextual snippets, hit highlighting, and author metadata.
+Executes a multi-word query against the index. Returns beautifully formatted Rich panels with contextual snippets, hit highlighting, and author metadata.
 ```bash
-# Default TF-IDF search:
-search-engine find good friends
+  # Default TF-IDF search:
+  search-engine find good friends
 
-# Advanced Okapi BM25 search:
-search-engine find Einstein thinking --strategy bm25
+  # Advanced Okapi BM25 search:
+  search-engine find Einstein thinking --strategy bm25
 ```
 
 ### 5. Generate a Sitemap (`sitemap`)
 
-*Bonus Feature:* Dynamically generates a `sitemaps.org/0.9` compliant XML file by pinging HTTP `HEAD` requests
-to verify live `Last-Modified` headers, alongside heuristic URL depth prioritisation.
+*Bonus Feature:* Dynamically generates a `sitemaps.org/0.9` compliant XML file by pinging HTTP `HEAD` requests to verify live `Last-Modified` headers, alongside heuristic URL depth prioritisation.
 
 ```bash
-# Provide the name. The dir is data/
-search-engine sitemap --output sitemap.xml
+  # Generates and saves the sitemap XML to dir/
+  search-engine sitemap --output sitemap.xml
+
+  # Display the latest sitemap in dir/ as a table
+  search-engine show-sitemap
+
+  # Display a specified sitemap XML in dir/
+  search-engine show-sitemap -f sitemap.xml
 ```
 
 ---
@@ -164,6 +174,8 @@ search-engine sitemap --output sitemap.xml
 
 This project strictly enforces an **80% test coverage** requirement across 410 statements and 102 branches.
 All outbound HTTP requests are fully mocked; tests will not hit live servers.
+
+*Note: `uv run` can be omitted if executing withing the virtual environment.*
 
 **Run the standard test suite:**
 ```bash
