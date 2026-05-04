@@ -388,3 +388,99 @@ def sitemap(
         f"[bold green]Success![/bold green] Professional Sitemap generated at "
         f"[cyan]{out_path}[/cyan]"
     )
+
+
+def find_nearest_xml(directory: Path = Path("data")) -> Path | None:
+    """Find the most recently modified .xml file in the given directory."""
+    if not directory.exists():
+        return None
+    xml_files = list(directory.glob("*.xml"))
+    if not xml_files:
+        return None
+    # Return the most recently modified file (by mtime)
+    return max(xml_files, key=lambda f: f.stat().st_mtime)
+
+
+@app.command(rich_help_panel="General Utilities")
+def show_sitemap(
+    sitemap_file: Annotated[
+        Path | None,
+        typer.Option("--file", "-f", help="Path to the sitemap XML file.")
+    ] = None
+) -> None:
+    """
+    [cyan]Display[/cyan] the sitemap in a formatted Rich table.
+    If no --file is given, the command automatically searches for the
+    most recent .xml file in the 'data/' directory. If none is found there,
+    it falls back to the current working directory.
+    """
+    # Determine which file to use
+    if sitemap_file is None:
+        # Only search in the data/ directory
+        sitemap_file = find_nearest_xml(Path("data"))
+        if sitemap_file is None:
+            console.print(
+                "[bold red]Error: ",
+                "No .xml sitemap file found in 'data/' directory.[/bold red]\n"
+                "Please generate a sitemap first using ",
+                "[green]search-engine sitemap[/green]."
+            )
+            raise typer.Exit(code=1)
+    else:
+        # User provided a specific file. it must reside inside data/
+        full_path = Path("data") / sitemap_file
+        if not full_path.exists():
+            console.print(
+                f"[bold red]Error: Sitemap file not found at {full_path}.[/bold red]"
+            )
+            raise typer.Exit(code=1)
+        sitemap_file = full_path
+
+    # Parse and display the sitemap
+    try:
+        tree = ET.parse(sitemap_file)
+        root = tree.getroot()
+        ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+
+        urls = root.findall("sm:url", ns)
+        if not urls:
+            console.print("[yellow]No <url> elements found in the sitemap.[/yellow]")
+            return
+
+        table = Table(
+            title=f"Sitemap: {sitemap_file.name}",
+            title_style="bold cyan",
+            caption=f"Total URLs: {len(urls)}",
+            caption_style="italic",
+            show_header=True,
+            header_style="bold magenta",
+        )
+        table.add_column("No.", style="bold white", no_wrap=False)
+        table.add_column("URL", style="cyan", no_wrap=False)
+        table.add_column("Last Modified", style="green")
+        table.add_column("Change Frequency", style="yellow")
+        table.add_column("Priority", style="white")
+
+        url_no = 1 if len(urls) > 0 else 0
+        for url_elem in urls:
+            loc = url_elem.find("sm:loc", ns)
+            lastmod = url_elem.find("sm:lastmod", ns)
+            changefreq = url_elem.find("sm:changefreq", ns)
+            priority = url_elem.find("sm:priority", ns)
+
+            table.add_row(
+                "N/A" if url_no == 0 else str(url_no),
+                loc.text if loc is not None else "N/A",
+                lastmod.text if lastmod is not None else "N/A",
+                changefreq.text if changefreq is not None else "N/A",
+                priority.text if priority is not None else "N/A",
+            )
+            url_no += 1
+        console.print(table)
+
+    except ET.ParseError as e:
+        console.print(f"[bold red]XML Parse Error:[/bold red] {e}")
+        raise typer.Exit(code=1) from None
+    except Exception as e:
+        console.print(f"[bold red]Unexpected error:[/bold red] {e}")
+        raise typer.Exit(code=1) from None

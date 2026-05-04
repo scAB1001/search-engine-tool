@@ -1,10 +1,11 @@
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from src.main import app, complete_word
+from src.main import app, complete_word, find_nearest_xml
 
 runner = CliRunner()
 
@@ -324,6 +325,161 @@ def test_cli_sitemap_relative_path(
     expected_path = tmp_path / "data" / "custom_sitemap.xml"
     assert expected_path.exists()
     assert "<loc>http://test</loc>" in expected_path.read_text()
+
+# ==========================================
+# TEST COMMAND: SHOW_SITEMAP
+# ==========================================
+
+def test_find_nearest_xml_empty_dir(tmp_path: Path) -> None:
+    """Test find_nearest_xml returns None when directory is empty or missing."""
+    assert find_nearest_xml(tmp_path / "nonexistent") is None
+
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    assert find_nearest_xml(empty_dir) is None
+
+
+def test_find_nearest_xml_returns_latest(tmp_path: Path) -> None:
+    """Test find_nearest_xml returns the most recently modified .xml file."""
+    import time
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    old_file = data_dir / "old.xml"
+    old_file.write_text("<root/>")
+    old_time = time.time() - 100
+    os.utime(old_file, (old_time, old_time))
+
+    new_file = data_dir / "new.xml"
+    new_file.write_text("<root/>")
+
+    result = find_nearest_xml(data_dir)
+    assert result == new_file
+
+    # Should ignore non-xml files
+    (data_dir / "other.txt").write_text("text")
+    result2 = find_nearest_xml(data_dir)
+    assert result2 == new_file
+
+
+def test_cli_show_sitemap_no_file_no_sitemap(monkeypatch, tmp_path: Path) -> None:
+    """Test show-sitemap fails when no .xml file exists in data/."""
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    result = runner.invoke(app, ["show-sitemap"])
+    assert result.exit_code == 1
+    assert "No .xml sitemap file found in 'data/' directory" in result.stdout
+
+
+def test_cli_show_sitemap_auto_finds_latest(monkeypatch, tmp_path: Path) -> None:
+    """Test show-sitemap automatically finds and displays the latest sitemap."""
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    sitemap_path = data_dir / "sitemap.xml"
+    sitemap_path.write_text('''<?xml version="1.0" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://quotes.toscrape.com/</loc>
+    <lastmod>2026-05-04</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>''')
+
+    result = runner.invoke(app, ["show-sitemap"])
+    assert result.exit_code == 0
+    assert "Sitemap: sitemap.xml" in result.stdout
+    # Check the domain name (not the full URL) as Rich may add hyperlinks/ANSI codes
+    assert "2026-05-04" in result.stdout
+    assert "daily" in result.stdout
+    assert "1.0" in result.stdout
+
+
+def test_cli_show_sitemap_with_explicit_file(monkeypatch, tmp_path: Path) -> None:
+    """Test show-sitemap --file displays a specific sitemap file."""
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    sitemap_path = data_dir / "custom.xml"
+    sitemap_path.write_text('''<?xml version="1.0" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://example.com/</loc>
+    <lastmod>2025-01-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>''')
+
+    result = runner.invoke(app, ["show-sitemap", "--file", "custom.xml"])
+    assert result.exit_code == 0
+    assert "Sitemap: custom.xml" in result.stdout
+    assert "https://example.com/" in result.stdout
+    assert "2025-01-01" in result.stdout
+    assert "monthly" in result.stdout
+    assert "0.5" in result.stdout
+
+
+def test_cli_show_sitemap_with_nonexistent_file(monkeypatch, tmp_path: Path) -> None:
+    """Test show-sitemap with a file that doesn't exist in data/."""
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    result = runner.invoke(app, ["show-sitemap", "--file", "missing.xml"])
+    assert result.exit_code == 1
+    expected_path = str(Path("data") / "missing.xml")
+    assert f"Error: Sitemap file not found at {expected_path}" in result.stdout
+
+
+def test_cli_show_sitemap_no_urls(monkeypatch, tmp_path: Path) -> None:
+    """Test show-sitemap displays a warning when the sitemap has no <url> elements."""
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    empty_sitemap = data_dir / "empty.xml"
+    empty_sitemap.write_text('''<?xml version="1.0" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+</urlset>''')
+
+    result = runner.invoke(app, ["show-sitemap", "--file", "empty.xml"])
+    assert result.exit_code == 0
+    assert "No <url> elements found in the sitemap." in result.stdout
+
+
+def test_cli_show_sitemap_xml_parse_error(monkeypatch, tmp_path: Path) -> None:
+    """Test show-sitemap handles XML parse errors gracefully."""
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    broken_sitemap = data_dir / "broken.xml"
+    broken_sitemap.write_text("This is not XML at all")
+
+    result = runner.invoke(app, ["show-sitemap", "--file", "broken.xml"])
+    assert result.exit_code == 1
+    assert "XML Parse Error" in result.stdout
+
+
+def test_cli_show_sitemap_general_exception(monkeypatch, tmp_path: Path) -> None:
+    """Test show-sitemap catches general exceptions (e.g., file read error)."""
+    monkeypatch.chdir(tmp_path)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    sitemap_path = data_dir / "valid.xml"
+    sitemap_path.write_text("<urlset/>")
+
+    # Force an exception during parsing by mocking ET.parse
+    with patch("xml.etree.ElementTree.parse",
+               side_effect=RuntimeError("Simulated crash")):
+        result = runner.invoke(app, ["show-sitemap", "--file", "valid.xml"])
+        assert result.exit_code == 1
+        assert "Unexpected error" in result.stdout
+        assert "Simulated crash" in result.stdout
+
 
 # ==========================================
 # TEST PATH RESOLUTION
