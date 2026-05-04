@@ -204,3 +204,74 @@ def test_fetch_author_metadata_exceptions(
         mock_sleep.assert_called_with(expected_sleep_time)
     else:
         assert mock_sleep.call_count == 0
+
+
+# ==========================================
+# TEST PoliteCrawler.fetch_headers
+# ==========================================
+
+@patch("src.crawler.requests.head")
+def test_fetch_headers_success(
+    mock_head: MagicMock,
+    mock_requests_get: MagicMock
+) -> None:
+    """Test fetch_headers returns headers on a successful HEAD request."""
+    mock_response = MagicMock()
+    mock_response.headers = {
+        "Content-Type": "text/html",
+        "Last-Modified": "Wed, 21 Oct 2015 07:28:00 GMT"
+    }
+    mock_head.return_value = mock_response
+
+    crawler = PoliteCrawler()
+    headers = crawler.fetch_headers("http://test.com")
+
+    assert headers == mock_response.headers
+    mock_head.assert_called_once_with(
+        "http://test.com",
+        headers=crawler.headers,
+        timeout=10.0
+    )
+
+
+@patch("src.crawler.requests.head")
+def test_fetch_headers_failure(
+    mock_head: MagicMock,
+    mock_requests_get: MagicMock
+) -> None:
+    """Test fetch_headers returns None and logs warning on request exception."""
+    mock_head.side_effect = requests.exceptions.Timeout("Connection timed out")
+
+    crawler = PoliteCrawler()
+    headers = crawler.fetch_headers("http://test.com")
+
+    assert headers is None
+    # Also check that logger.warning was called (optional, but can be captured)
+    # The line `logger.warning(...)` is executed, covering that branch.
+
+
+def test_fetch_headers_enforces_politeness():
+    """Test that fetch_headers respects the politeness window."""
+    with patch('src.crawler.time.sleep') as mock_sleep, \
+         patch('src.crawler.random.uniform', return_value=0.5), \
+         patch('src.crawler.requests.head') as mock_head:
+
+        mock_head.return_value = MagicMock(headers={})
+        crawler = PoliteCrawler()
+
+        # First request: initial last_request_time == 0 -> no politeness delay
+        with patch('time.time', return_value=100.0):
+            crawler.fetch_headers("http://test1.com")
+        mock_sleep.assert_not_called()
+
+        # Second request: only 4 seconds have passed -> must sleep
+        mock_sleep.reset_mock()
+        with patch('time.time', return_value=104.0):
+            crawler.fetch_headers("http://test2.com")
+        mock_sleep.assert_called_once_with(2.5)   # (6 - 4) + 0.5 = 2.5
+
+        # Third request: now 7 seconds have passed -> no sleep
+        mock_sleep.reset_mock()
+        with patch('time.time', return_value=111.0):
+            crawler.fetch_headers("http://test3.com")
+        mock_sleep.assert_not_called()

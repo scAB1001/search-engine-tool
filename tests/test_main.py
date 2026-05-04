@@ -209,20 +209,18 @@ def test_cli_sitemap_without_index(mock_get_path: MagicMock, tmp_path: Path) -> 
     assert result.exit_code == 1
 
 
-@patch("src.main.requests.head")
+@patch("src.crawler.PoliteCrawler.fetch_headers")
+@patch("src.main.get_index_path")
 def test_cli_sitemap_success_with_header(
-    mock_head: MagicMock,
     mock_get_path: MagicMock,
+    mock_fetch_headers: MagicMock,
     mock_index_file: Path,
     tmp_path: Path
 ) -> None:
     """Test 'sitemap' correctly parses an active Last-Modified HTTP header."""
     mock_get_path.return_value = mock_index_file
-
-    # Mock a successful HEAD request with a valid HTTP-Date
-    mock_response = MagicMock()
-    mock_response.headers = {"Last-Modified": "Wed, 21 Oct 2015 07:28:00 GMT"}
-    mock_head.return_value = mock_response
+    # Simulate a successful HEAD request with a Last-Modified header
+    mock_fetch_headers.return_value = {"Last-Modified": "Wed, 21 Oct 2015 07:28:00 GMT"}
 
     output_file = tmp_path / "sitemap.xml"
     result = runner.invoke(app, ["sitemap", "--output", str(output_file)])
@@ -238,18 +236,18 @@ def test_cli_sitemap_success_with_header(
     assert "<priority>1.0</priority>" in xml_content
 
 
-@patch("src.main.requests.head")
+@patch("src.crawler.PoliteCrawler.fetch_headers")
+@patch("src.main.get_index_path")
 def test_cli_sitemap_fallback_on_network_error(
-    mock_head: MagicMock,
     mock_get_path: MagicMock,
+    mock_fetch_headers: MagicMock,
     mock_index_file: Path,
     tmp_path: Path
 ) -> None:
     """Test 'sitemap' falls back to the current date if the network fails."""
     mock_get_path.return_value = mock_index_file
-
-    import requests
-    mock_head.side_effect = requests.RequestException("Network Error")
+    # Simulate network failure: fetch_headers returns None
+    mock_fetch_headers.return_value = None
 
     output_file = tmp_path / "sitemap.xml"
     result = runner.invoke(app, ["sitemap", "--output", str(output_file)])
@@ -257,8 +255,8 @@ def test_cli_sitemap_fallback_on_network_error(
     assert result.exit_code == 0
 
     xml_content = output_file.read_text()
-    # It shouldn't crash; it should just write the file with today's date
     assert "<loc>http://test</loc>" in xml_content
+    # Should use today's date; just check that <lastmod> is present
     assert "<lastmod>" in xml_content
 
 
@@ -272,20 +270,18 @@ def test_cli_sitemap_no_urls(mock_get_path: MagicMock, empty_index_file: Path) -
     assert "No URLs found" in result.stdout
 
 
-@patch("src.main.requests.head")
+@patch("src.crawler.PoliteCrawler.fetch_headers")
+@patch("src.main.get_index_path")
 def test_cli_sitemap_depths_and_missing_header(
-    mock_head: MagicMock,
     mock_get_path: MagicMock,
+    mock_fetch_headers: MagicMock,
     multi_url_index_file: Path,
     tmp_path: Path
 ) -> None:
     """Test URL depth prioritization and header fallback logic."""
-    # Uses the new conftest fixture!
     mock_get_path.return_value = multi_url_index_file
-
-    mock_response = MagicMock()
-    mock_response.headers = {}
-    mock_head.return_value = mock_response
+    # No Last-Modified header -> fallback to today's date
+    mock_fetch_headers.return_value = {}
 
     output_file = tmp_path / "sitemap.xml"
     result = runner.invoke(app, ["sitemap", "--output", str(output_file)])
@@ -298,33 +294,28 @@ def test_cli_sitemap_depths_and_missing_header(
     assert "<priority>0.5</priority>" in xml_content
 
 
-@patch("src.main.requests.head")
+@patch("src.crawler.PoliteCrawler.fetch_headers")
+@patch("src.main.get_index_path")
 def test_cli_sitemap_relative_path(
-    mock_head: MagicMock,
     mock_get_path: MagicMock,
+    mock_fetch_headers: MagicMock,
     mock_index_file: Path,
     monkeypatch,
     tmp_path: Path
 ) -> None:
     """Test 'sitemap' correctly routes relative output paths into a data/ directory."""
     mock_get_path.return_value = mock_index_file
+    mock_fetch_headers.return_value = {}
 
-    mock_response = MagicMock()
-    mock_response.headers = {}
-    mock_head.return_value = mock_response
-
-    # Prevents the test from creating a real 'data' folder in your actual project root!
     monkeypatch.chdir(tmp_path)
 
-    # Pass a RELATIVE string path rather than an absolute Path object
     result = runner.invoke(app, ["sitemap", "--output", "custom_sitemap.xml"])
 
     assert result.exit_code == 0
-
-    # Verify the code correctly prepended 'data/' and created the folder
     expected_path = tmp_path / "data" / "custom_sitemap.xml"
     assert expected_path.exists()
     assert "<loc>http://test</loc>" in expected_path.read_text()
+
 
 # ==========================================
 # TEST COMMAND: SHOW_SITEMAP
