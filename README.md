@@ -1,7 +1,19 @@
-# Search Engine Tool (COMP3011)
-
 [![CI](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/scAB1001/search-engine-tool/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/scAB1001/search-engine-tool/graph/badge.svg?token=919TUQ3FW1)](https://codecov.io/gh/scAB1001/search-engine-tool)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)](https://www.python.org/downloads/release/python-3120/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com)
+
+# Search Engine Tool (COMP3011)
+
+![Search Engine Demonstration](docs/comp3011_cwk2_core_demo.gif)
+
+**BSc Computer Science — COMP3011 Web Services and Web Data, Coursework 2**
+**University of Leeds, School of Computing, 2025/26**
+
+---
 
 ## 📖 Project Overview and Purpose
 
@@ -100,7 +112,7 @@ This project uses [uv](https://github.com/astral-sh/uv) as its package and envir
   uv tool install .
 ```
 
-*Tip: If you make changes and still wish to run it globally, run the command with `-n --reinstall'.*
+*Tip: If you make any changes, run the command with `-n --reinstall'. to skip cache.*
 
 #### Enable Dynamic Autocompletion (Optional but recommended)
 
@@ -125,6 +137,8 @@ Crawls the target website, processes the text, calculates global term frequencie
   search-engine build --max-pages 3
 ```
 
+*Bonus Feature:* Specify how many pages you would like to crawl with `--max-pages`.
+
 ### 2. Verify the Index (`load`)
 
 Loads the index into memory to verify data integrity and file structure.
@@ -136,15 +150,19 @@ Loads the index into memory to verify data integrity and file structure.
 
 Outputs the global Collection Frequency, Base IDF score, and a tabular breakdown of Term Frequencies and positional extents across all documents containing the word.
 
-*Tip: Press `TAB` after typing part of your search term to see auto-completed suggestions from your database!*
-
 ```bash
+  search-engine print einstein
+
+  # Try autocomplete
   search-engine print ein[TAB]
 ```
+
+*Bonus Feature*: Press `TAB` after typing part of your search term to see auto-completed suggestions from your database!
 
 ### 4. Search the Index (`find`)
 
 Executes a multi-word query against the index. Returns beautifully formatted Rich panels with contextual snippets, hit highlighting, and author metadata.
+
 ```bash
   # Default TF-IDF search:
   search-engine find good friends
@@ -152,6 +170,8 @@ Executes a multi-word query against the index. Returns beautifully formatted Ric
   # Advanced Okapi BM25 search:
   search-engine find Einstein thinking --strategy bm25
 ```
+
+*Bonus Feature*: Specify the index method to use with `--strategy`. Leave either the default (TF-IDF) or choose the alternative (BM25)
 
 ### 5. Generate a Sitemap (`sitemap`)
 
@@ -172,7 +192,7 @@ Executes a multi-word query against the index. Returns beautifully formatted Ric
 
 ## 🧪 Testing Instructions
 
-This project strictly enforces an **80% test coverage** requirement across 410 statements and 102 branches.
+This project strictly enforces an **80% test coverage** requirement across all statements and branches.
 All outbound HTTP requests are fully mocked; tests will not hit live servers.
 
 *Note: `uv run` can be omitted if executing withing the virtual environment.*
@@ -191,3 +211,7 @@ uv run pytest -v --cov=src
 ```bash
 uv run pre-commit run --all-files
 ```
+
+## License
+
+This repository contains coursework submitted for academic assessment at the University of Leeds. All rights reserved. Reproduction or reuse of any component without written permission is not permitted.
