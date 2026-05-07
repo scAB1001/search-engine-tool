@@ -211,44 +211,57 @@ HTML    Politeness  Zones    TF-IDF    Ranking      Rich UI
 
 #### TF-IDF Ranking
 
-```math
-score(d, q) = Σ TF(t, d) * IDF(t) * zone_weight(t)
-
-Where:
-  TF(t, d) = frequency(t, d) / total_words(d)
-  IDF(t) = log(N / df(t))
-  N = total documents
-  df(t) = documents containing term t
-  zone_weight = 1.0 (text) | 1.5 (author) | 0.5 (tag)
-
-Complexity: O(m * k) where m = query terms, k = matching docs
-
+**Formula:**
 ```
+score(d, q) = Σ TF(t, d) × IDF(t) × zone_weight(t)
+```
+
+**Components:**
+- **TF(t, d)** = frequency(t, d) / total_words(d)
+- **IDF(t)** = log(N / df(t))
+  - N = total documents in corpus
+  - df(t) = documents containing term t
+- **zone_weight** = 1.0 (text) | 1.5 (author) | 0.5 (tag)
+
+**Time Complexity:** O(m × k) where m = query terms, k = matching docs
+
+---
 
 #### Okapi BM25 Ranking
-```math
 
-score(d, q) = Σ IDF(t) * (f(t,d) * (k1 + 1)) / (f(t,d) + k1 * (1 - b + b * (|d| / avgdl)))
-
-Where:
-  f(t,d) = raw term frequency in document d
-  |d| = document length in words
-  avgdl = average document length in corpus
-  k1 = 1.5 (controls TF saturation)
-  b = 0.75 (controls length normalization)
-
-Parameters Based On:
-  - k1: Typical value for web search (prevents TF dominance)
-  - b: Standard for corpus without extreme length variance
-
-Advantages Over TF-IDF:
-  - Saturation: repeated words have diminishing returns
-  - Length normalization: longer docs not automatically ranked higher
-  - Used by Elasticsearch, Solr, Lucene (industry standard)
-
-Complexity: O(m * k) with better ranking quality than TF-IDF
-
+**Formula:**
 ```
+score(d, q) = Σ IDF(t) × [f(t,d) × (k1 + 1)] / [f(t,d) + k1 × (1 - b + b × (|d| / avgdl))]
+```
+
+**Components:**
+- **f(t,d)** = raw term frequency in document d
+- **|d|** = document length in words
+- **avgdl** = average document length in corpus
+- **k1** = 1.5 (controls TF saturation, typical for web search)
+- **b** = 0.75 (controls length normalization strength)
+
+**Advantages Over TF-IDF:**
+- ✓ **TF Saturation:** Repeated words have diminishing returns (prevents over-weighting)
+- ✓ **Length Normalization:** Longer documents not automatically ranked higher
+- ✓ **Industry Standard:** Used by Elasticsearch, Solr, Lucene
+- ✓ **Empirical Performance:** Better ranking quality on real-world queries
+
+**Time Complexity:** O(m × k) with superior ranking quality vs TF-IDF
+
+---
+
+#### Algorithm Comparison
+
+| Aspect               | TF-IDF   | BM25                               |
+| -------------------- | -------- | ---------------------------------- |
+| TF Saturation        | ✗ None   | ✓ Built-in                         |
+| Length Normalization | ✗ Manual | ✓ Automatic                        |
+| Complexity           | O(m·k)   | O(m·k)                             |
+| Industry Use         | Academic | Production (Google, Elasticsearch) |
+| Quality              | Good     | Better                             |
+
+**Decision:** Both implemented to demonstrate understanding of classical (TF-IDF) and modern (BM25) approaches.
 
 ### Data Structures
 
