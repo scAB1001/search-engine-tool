@@ -10,8 +10,7 @@ __pycache__/
 *.sh
 
 # Custom files
-*copy*
-z.md
+other/
 
 # Distribution / packaging
 .Python

@@ -25,7 +25,24 @@ class InvertedIndex:
         self.stemmer = PorterStemmer()
 
     def tokenize(self, text: str) -> list[str]:
-        """Cleans text, extracts tokens, and applies Porter Stemming."""
+        """
+        Clean text, extract tokens, and apply Porter Stemming.
+
+        Edge Cases Handled:
+        - Empty strings → returns []
+        - Special characters → filtered via regex [a-z0-9]+
+        - Case insensitivity → .lower() applied
+        - Numbers → preserved (e.g., "2025" stays as token)
+
+        Args:
+            text: Raw input text (any case, may contain punctuation)
+
+        Returns:
+            list[str]: Lowercased, stemmed tokens
+
+        Raises:
+            None (degrades gracefully on invalid input)
+        """
         raw_tokens = self.tokenizer_regex.findall(text.lower())
         return [self.stemmer.stem(token) for token in raw_tokens]
 

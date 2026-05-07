@@ -29,7 +29,33 @@ class SearchEngine:
         query: str,
         strategy: SearchStrategy = SearchStrategy.TF_IDF
     ) -> list[tuple[str, float]]:
-        """Processes a query and returns ranked document IDs."""
+        """
+        Processes a query and returns ranked document IDs.
+
+        Boolean AND intersection with TF-IDF or BM25 ranking.
+
+        ALGORITHM:
+        1. Tokenize and stem query (Porter Stemmer)
+        2. Find postings for first token → set A
+        3. For each additional token:
+            set A = set A ∩ postings[token]
+        4. Score matching docs using selected strategy:
+            - TF-IDF: score = Σ(TF * IDF * zone_weight)
+            - BM25: score = Σ(IDF * (raw_tf * (k1+1)) / (raw_tf + k1*(1-b+b*len_norm)))
+
+        Time Complexity:
+            - Query parsing: O(m) where m = query length
+            - Intersection: O(k * log n) where k = docs, n = postings
+            - Scoring: O(k * m) where k = matching docs, m = query terms
+            Total: O(k * m * log n)
+
+        Space Complexity: O(k) for storing results
+
+        Zone Weighting:
+            - Author zone: +1.5x multiplier (high semantic value)
+            - Tag zone: +0.5x multiplier (moderate value)
+            - Text zone: 1.0x baseline
+        """
         tokens = self.index_db.tokenize(query)
         if not tokens:
             return []
