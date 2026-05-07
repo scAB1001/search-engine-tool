@@ -53,6 +53,12 @@ class PoliteCrawler:
         """
         Fetches and parses quotes from a given URL, utilizing a retry mechanism
         for transient network failures and strict timeout limits.
+
+        Time Complexity:  O(n) where n = quotes on page (~10)
+        Space Complexity: O(n) for storing parsed quotes
+
+        Retries: 3 attempts with backoff (10s timeout, 2s connection)
+        Politeness: 6s delay + 0-2s jitter between requests
         """
         self._enforce_politeness()
         max_retries = 3
