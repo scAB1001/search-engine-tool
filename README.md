@@ -31,6 +31,8 @@ This project is an elite, production-grade CLI Search Engine built for the COMP3
 * **Search Operations**: Boolean AND intersection, relevance scoring
 * **Bonus Features**: Sitemap generation with HTTP header verification
 
+*Note: Run `chmod +x basic_commands.sh` and then `./basic_commands.sh` to see the tool in action quickly.*
+
 ### robots.txt compliance
 
 The crawler respects a 6‑second politeness window with jitter but does not parse robots.txt because quotes.toscrape.com is a dedicated training site with no restrictive directives. In a production system, a robots.txt parser would be implemented.

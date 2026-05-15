@@ -147,7 +147,7 @@ class PoliteCrawler:
                     author_url, headers=self.headers, timeout=10.0)
                 response.raise_for_status()
 
-                # CRITICAL: Record the exact time the request finished
+                # Record the exact time the request finished
                 self.last_request_time = time.time()
 
                 content_type = response.headers.get("Content-Type", "")

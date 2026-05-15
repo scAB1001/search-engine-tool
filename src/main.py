@@ -21,6 +21,7 @@ app = typer.Typer(
     help="[bold cyan]Quotes Search Engine[/bold cyan] - COMP3011 Coursework 2.",
     rich_markup_mode="rich",
     epilog="Built with :red_heart-emoji:  by Andreas for COMP3011",
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 console = Console()
@@ -45,9 +46,8 @@ def main(ctx: typer.Context) -> None:
 
 
 def get_index_path() -> Path:
-    """Returns the secure, OS-specific path to the index file."""
-    app_dir = typer.get_app_dir(APP_NAME)
-    path = Path(app_dir) / "index.json"
+    """Returns the path to the index file in the project's data/ directory."""
+    path = Path("data") / "index.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 

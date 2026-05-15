@@ -256,13 +256,11 @@ def test_cli_sitemap_fallback_on_network_error(
 
     xml_content = output_file.read_text()
     assert "<loc>http://test</loc>" in xml_content
-    # Should use today's date; just check that <lastmod> is present
     assert "<lastmod>" in xml_content
 
 
 def test_cli_sitemap_no_urls(mock_get_path: MagicMock, empty_index_file: Path) -> None:
     """Test 'sitemap' exits gracefully if the registry is empty."""
-    # Uses the new conftest fixture!
     mock_get_path.return_value = empty_index_file
 
     result = runner.invoke(app, ["sitemap"])
@@ -475,17 +473,15 @@ def test_cli_show_sitemap_general_exception(monkeypatch, tmp_path: Path) -> None
 # TEST PATH RESOLUTION
 # ==========================================
 
-@patch("src.main.typer.get_app_dir")
-def test_get_index_path(mock_get_app_dir: MagicMock, tmp_path: Path) -> None:
-    """Test that the index path is correctly resolved and directories are created."""
-    mock_get_app_dir.return_value = str(tmp_path / "app_dir")
-
+def test_get_index_path() -> None:
+    """Test that the index path is correctly resolved to data/index.json."""
     from src.main import get_index_path
     path = get_index_path()
 
-    assert path.parent.exists()
     assert path.name == "index.json"
-    assert str(tmp_path) in str(path)
+    assert str(path) == str(Path("data") / "index.json")
+    # Verify the parent directory exists after calling the function
+    assert path.parent.exists()
 
 
 # ==========================================
