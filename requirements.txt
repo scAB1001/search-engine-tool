@@ -562,7 +562,7 @@ urllib3==2.7.0 \
     # via
     #   requests
     #   types-requests
-virtualenv==21.3.1 \
-    --hash=sha256:c2305bc1fddeec40699b8370d13f8d431b0701f00ce895061ce493aeded4426b \
-    --hash=sha256:d1a71cf58f2f9228fff23a1f6ec15d39785c6b32e03658d104974247145edd35
+virtualenv==21.3.3 \
+    --hash=sha256:7d5987d8369e098e41406efb780a3d4ca79280097293899e351a6407ee153ab3 \
+    --hash=sha256:f5bda277e553b1c2b3c1a8debfc30496e1288cc93ce6b7b71b3280047e317328
     # via pre-commit
