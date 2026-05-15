@@ -18,7 +18,6 @@ class InvertedIndex:
         self.total_documents: int = 0
         self._raw_documents: dict[str, list[str]] = {}
 
-        # NEW: Stores raw metadata for rich CLI snippets and Okapi BM25 lengths
         self.document_registry: dict[str, dict[str, Any]] = {}
 
         self.tokenizer_regex = re.compile(r'[a-z0-9]+')

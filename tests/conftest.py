@@ -139,19 +139,15 @@ def populated_index() -> InvertedIndex:
 
 
 @pytest.fixture
-def blank_index() -> InvertedIndex:
-    """Provides a fresh, empty InvertedIndex instance."""
-    return InvertedIndex()
+def engine(populated_index: InvertedIndex) -> SearchEngine:
+    """Provides a pre-configured SearchEngine instance for search tests."""
+    return SearchEngine(populated_index)
 
 
 @pytest.fixture
-def empty_index_file(tmp_path: Path) -> Path:
-    """Provides a valid index file with zero documents for sitemap testing."""
-    empty_index = tmp_path / "empty.json"
-    empty_index.write_text(
-        '{"metadata": {"total_documents": 0}, "document_registry": {}, "index": {}}'
-    )
-    return empty_index
+def blank_index() -> InvertedIndex:
+    """Provides a fresh, empty InvertedIndex instance."""
+    return InvertedIndex()
 
 
 @pytest.fixture
@@ -171,9 +167,13 @@ def multi_url_index_file(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def engine(populated_index: InvertedIndex) -> SearchEngine:
-    """Provides a pre-configured SearchEngine instance for search tests."""
-    return SearchEngine(populated_index)
+def empty_index_file(tmp_path: Path) -> Path:
+    """Provides a valid index file with zero documents for sitemap testing."""
+    empty_index = tmp_path / "empty.json"
+    empty_index.write_text(
+        '{"metadata": {"total_documents": 0}, "document_registry": {}, "index": {}}'
+    )
+    return empty_index
 
 
 @pytest.fixture
